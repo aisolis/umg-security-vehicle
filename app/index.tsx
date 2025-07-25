@@ -2,21 +2,22 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  TextInput,
+  TouchableOpacity,
   StyleSheet,
+  Dimensions,
   KeyboardAvoidingView,
   Platform,
   Alert,
-  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Lock, User, Eye, EyeOff, Shield } from 'lucide-react-native';
-import { colors, typography, spacing, borderRadius } from '@/styles';
+import { Lock, User, Eye, EyeOff } from 'lucide-react-native';
+import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const [credentials, setCredentials] = useState({
@@ -52,6 +53,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
+      // Simulación de login con servicio de autenticación
       const success = await AuthService.login(credentials.username, credentials.password);
       
       if (success) {
@@ -70,7 +72,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={[colors.primary[50], colors.primary[100]]}
+      colors={[colors.primary.main, colors.primary.dark]}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -79,80 +81,93 @@ export default function LoginScreen() {
           style={styles.keyboardContainer}
         >
           <View style={styles.content}>
-            {/* Header Section */}
+            {/* Logo/Header Section */}
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Shield size={48} color={colors.primary[600]} strokeWidth={1.5} />
+                <Lock size={48} color={colors.accent.main} strokeWidth={2} />
               </View>
               <Text style={styles.title}>VehicleGuard</Text>
               <Text style={styles.subtitle}>Control Vehicular Seguro</Text>
             </View>
 
-            {/* Login Card */}
-            <Card style={styles.loginCard}>
-              <CardHeader>
-                <Text style={styles.cardTitle}>Iniciar Sesión</Text>
-                <Text style={styles.cardDescription}>
-                  Ingresa tus credenciales para acceder al sistema
-                </Text>
-              </CardHeader>
-              
-              <CardContent>
-                <View style={styles.form}>
-                  <Input
-                    label="Usuario"
-                    placeholder="Ingresa tu usuario"
-                    value={credentials.username}
-                    onChangeText={(text) => {
-                      setCredentials({ ...credentials, username: text });
-                      if (errors.username) {
-                        setErrors({ ...errors, username: undefined });
-                      }
-                    }}
-                    error={errors.username}
-                    leftIcon={<User size={20} color={colors.mutedForeground} />}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-
-                  <Input
-                    label="Contraseña"
-                    placeholder="Ingresa tu contraseña"
-                    value={credentials.password}
-                    onChangeText={(text) => {
-                      setCredentials({ ...credentials, password: text });
-                      if (errors.password) {
-                        setErrors({ ...errors, password: undefined });
-                      }
-                    }}
-                    error={errors.password}
-                    leftIcon={<Lock size={20} color={colors.mutedForeground} />}
-                    rightIcon={
-                      <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                        {showPassword ? (
-                          <EyeOff size={20} color={colors.mutedForeground} />
-                        ) : (
-                          <Eye size={20} color={colors.mutedForeground} />
-                        )}
-                      </TouchableOpacity>
-                    }
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-
-                  <Button
-                    onPress={handleLogin}
-                    disabled={!isFormValid}
-                    loading={isLoading}
-                    size="lg"
-                    style={styles.loginButton}
-                  >
-                    {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-                  </Button>
+            {/* Form Section */}
+            <View style={styles.form}>
+              {/* Username Input */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIcon}>
+                  <User size={20} color={colors.neutral.medium} />
                 </View>
-              </CardContent>
-            </Card>
+                <TextInput
+                  style={[
+                    styles.input,
+                    errors.username && styles.inputError
+                  ]}
+                  placeholder="Usuario"
+                  placeholderTextColor={colors.neutral.medium}
+                  value={credentials.username}
+                  onChangeText={(text) => {
+                    setCredentials({ ...credentials, username: text });
+                    if (errors.username) {
+                      setErrors({ ...errors, username: undefined });
+                    }
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+              {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+
+              {/* Password Input */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIcon}>
+                  <Lock size={20} color={colors.neutral.medium} />
+                </View>
+                <TextInput
+                  style={[
+                    styles.input,
+                    errors.password && styles.inputError
+                  ]}
+                  placeholder="Contraseña"
+                  placeholderTextColor={colors.neutral.medium}
+                  value={credentials.password}
+                  onChangeText={(text) => {
+                    setCredentials({ ...credentials, password: text });
+                    if (errors.password) {
+                      setErrors({ ...errors, password: undefined });
+                    }
+                  }}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff size={20} color={colors.neutral.medium} />
+                  ) : (
+                    <Eye size={20} color={colors.neutral.medium} />
+                  )}
+                </TouchableOpacity>
+              </View>
+              {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+
+              {/* Login Button */}
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  (!isFormValid || isLoading) && styles.loginButtonDisabled
+                ]}
+                onPress={handleLogin}
+                disabled={!isFormValid || isLoading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.loginButtonText}>
+                  {isLoading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Footer */}
             <View style={styles.footer}>
@@ -178,69 +193,110 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: spacing[6],
+    paddingHorizontal: spacing.large,
     justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: spacing[8],
+    marginBottom: spacing.xxlarge,
   },
   logoContainer: {
-    width: 96,
-    height: 96,
-    backgroundColor: colors.background,
-    borderRadius: borderRadius['2xl'],
+    width: 80,
+    height: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing[6],
-    shadowColor: colors.primary[600],
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    marginBottom: spacing.medium,
   },
   title: {
-    ...typography.heading.h1,
-    color: colors.primary[900],
-    marginBottom: spacing[2],
-    textAlign: 'center',
+    ...typography.heading.large,
+    color: colors.neutral.white,
+    marginBottom: spacing.small,
   },
   subtitle: {
-    ...typography.body.large,
-    color: colors.secondary[600],
-    textAlign: 'center',
-  },
-  loginCard: {
-    marginBottom: spacing[8],
-  },
-  cardTitle: {
-    ...typography.heading.h3,
-    color: colors.foreground,
-    textAlign: 'center',
-    marginBottom: spacing[2],
-  },
-  cardDescription: {
-    ...typography.body.default,
-    color: colors.mutedForeground,
+    ...typography.body.medium,
+    color: colors.neutral.light,
     textAlign: 'center',
   },
   form: {
-    gap: spacing[4],
+    marginBottom: spacing.xlarge,
+  },
+  inputContainer: {
+    position: 'relative',
+    marginBottom: spacing.medium,
+  },
+  input: {
+    backgroundColor: colors.neutral.white,
+    paddingHorizontal: spacing.large + 32, // Extra space for icon
+    paddingVertical: spacing.medium,
+    borderRadius: 12,
+    fontSize: 16,
+    color: colors.neutral.dark,
+    shadowColor: colors.neutral.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  inputError: {
+    borderWidth: 1,
+    borderColor: colors.error.main,
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: spacing.medium,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    zIndex: 1,
+  },
+  eyeIcon: {
+    position: 'absolute',
+    right: spacing.medium,
+    top: '50%',
+    transform: [{ translateY: -10 }],
+    zIndex: 1,
+    padding: 4,
+  },
+  errorText: {
+    color: colors.error.light,
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: spacing.small,
   },
   loginButton: {
-    marginTop: spacing[2],
+    backgroundColor: colors.accent.main,
+    paddingVertical: spacing.medium + 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: spacing.large,
+    shadowColor: colors.accent.main,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  loginButtonDisabled: {
+    backgroundColor: colors.neutral.medium,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  loginButtonText: {
+    ...typography.button.large,
+    color: colors.neutral.white,
   },
   footer: {
     alignItems: 'center',
     marginTop: 'auto',
+    paddingBottom: spacing.large,
   },
   footerText: {
-    ...typography.label.default,
-    color: colors.secondary[500],
-    marginBottom: spacing[1],
+    ...typography.caption.medium,
+    color: colors.neutral.light,
   },
   footerSubtext: {
-    ...typography.label.small,
-    color: colors.secondary[400],
+    ...typography.caption.small,
+    color: colors.neutral.medium,
+    marginTop: 4,
   },
 });
