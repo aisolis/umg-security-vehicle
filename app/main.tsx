@@ -4,22 +4,33 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   Alert,
   Platform,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Lock, Clock as Unlock, LogOut, Bluetooth, BluetoothOff, Car, Shield, ShieldCheck } from 'lucide-react-native';
-import { colors, typography, spacing } from '@/styles';
+import { 
+  Lock, 
+  Unlock, 
+  LogOut, 
+  Bluetooth, 
+  BluetoothOff, 
+  Car, 
+  Shield, 
+  ShieldCheck,
+  AlertTriangle,
+  Settings,
+  User,
+} from 'lucide-react-native';
+import { colors, typography, spacing, borderRadius, shadows } from '@/styles';
 import { BluetoothService } from '@/services/BluetoothService';
 import { AuthService } from '@/services/AuthService';
-import { VehicleStatusCard } from '@/components/vehicle/VehicleStatusCard';
-import { ActionButton } from '@/components/common/ActionButton';
-
-const { width } = Dimensions.get('window');
+import { Button } from '@/components/ui/Button';
+import { Card, CardContent, CardHeader } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 
 type VehicleState = 'locked' | 'unlocked' | 'unknown';
 
@@ -30,20 +41,16 @@ export default function MainScreen() {
   const [userInfo, setUserInfo] = useState<{ username: string } | null>(null);
 
   useEffect(() => {
-    // Obtener información del usuario
     const user = AuthService.getCurrentUser();
     setUserInfo(user);
-
-    // Inicializar conexión Bluetooth (simulada)
     initializeBluetoothConnection();
   }, []);
 
   const initializeBluetoothConnection = async () => {
     try {
-      // Simulación de conexión Bluetooth
       await BluetoothService.initialize();
       setIsConnected(true);
-      setVehicleState('locked'); // Estado inicial del vehículo
+      setVehicleState('locked');
     } catch (error) {
       console.log('Bluetooth initialization failed:', error);
       setIsConnected(false);
@@ -66,13 +73,11 @@ export default function MainScreen() {
     triggerHapticFeedback();
 
     try {
-      // Simulación de comando vía Bluetooth
       const success = await BluetoothService.sendCommand(action);
       
       if (success) {
         setVehicleState(action === 'lock' ? 'locked' : 'unlocked');
         
-        // Feedback háptico de éxito
         if (Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
@@ -109,81 +114,152 @@ export default function MainScreen() {
     );
   };
 
+  const getVehicleStatusConfig = () => {
+    switch (vehicleState) {
+      case 'locked':
+        return {
+          icon: <ShieldCheck size={48} color={colors.success[500]} strokeWidth={1.5} />,
+          title: 'Vehículo Seguro',
+          subtitle: 'El vehículo está bloqueado',
+          badgeVariant: 'success' as const,
+          badgeText: 'Bloqueado',
+        };
+      case 'unlocked':
+        return {
+          icon: <Shield size={48} color={colors.warning[500]} strokeWidth={1.5} />,
+          title: 'Vehículo Disponible',
+          subtitle: 'El vehículo está desbloqueado',
+          badgeVariant: 'default' as const,
+          badgeText: 'Desbloqueado',
+        };
+      default:
+        return {
+          icon: <AlertTriangle size={48} color={colors.secondary[400]} strokeWidth={1.5} />,
+          title: 'Estado Desconocido',
+          subtitle: isConnected ? 'Verificando estado...' : 'Sin conexión',
+          badgeVariant: 'secondary' as const,
+          badgeText: 'Desconocido',
+        };
+    }
+  };
+
+  const statusConfig = getVehicleStatusConfig();
+
   return (
     <LinearGradient
-      colors={[colors.neutral.dark, colors.primary.main]}
+      colors={[colors.background, colors.primary[50]]}
       style={styles.container}
     >
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
-            <View>
-              <Text style={styles.welcomeText}>Bienvenido</Text>
-              <Text style={styles.usernameText}>{userInfo?.username || 'Usuario'}</Text>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <View style={styles.userAvatar}>
+                <User size={24} color={colors.primary[600]} />
+              </View>
+              <View>
+                <Text style={styles.welcomeText}>Bienvenido</Text>
+                <Text style={styles.usernameText}>{userInfo?.username || 'Usuario'}</Text>
+              </View>
             </View>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <LogOut size={24} color={colors.neutral.white} />
-            </TouchableOpacity>
+            
+            <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.headerButton}>
+                <Settings size={20} color={colors.secondary[600]} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.headerButton} onPress={handleLogout}>
+                <LogOut size={20} color={colors.secondary[600]} />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
-        {/* Main Content */}
-        <View style={styles.content}>
           {/* Bluetooth Status */}
-          <View style={styles.bluetoothStatus}>
-            <View style={styles.bluetoothIndicator}>
-              {isConnected ? (
-                <Bluetooth size={20} color={colors.success.main} />
-              ) : (
-                <BluetoothOff size={20} color={colors.error.main} />
-              )}
-              <Text style={[
-                styles.bluetoothText,
-                { color: isConnected ? colors.success.main : colors.error.main }
-              ]}>
-                {isConnected ? 'Conectado' : 'Sin Conexión'}
-              </Text>
-            </View>
-          </View>
+          <Card style={styles.bluetoothCard}>
+            <CardContent style={styles.bluetoothContent}>
+              <View style={styles.bluetoothInfo}>
+                {isConnected ? (
+                  <Bluetooth size={20} color={colors.success[500]} />
+                ) : (
+                  <BluetoothOff size={20} color={colors.destructive[500]} />
+                )}
+                <Text style={styles.bluetoothText}>
+                  {isConnected ? 'Dispositivo Conectado' : 'Sin Conexión Bluetooth'}
+                </Text>
+              </View>
+              <Badge variant={isConnected ? 'success' : 'destructive'}>
+                {isConnected ? 'Conectado' : 'Desconectado'}
+              </Badge>
+            </CardContent>
+          </Card>
 
-          {/* Vehicle Status Card */}
-          <VehicleStatusCard 
-            state={vehicleState}
-            isConnected={isConnected}
-          />
+          {/* Vehicle Status */}
+          <Card style={styles.vehicleCard}>
+            <CardHeader style={styles.vehicleHeader}>
+              <View style={styles.vehicleIconContainer}>
+                <Car size={64} color={colors.secondary[400]} strokeWidth={1} />
+                <View style={styles.statusIconOverlay}>
+                  {statusConfig.icon}
+                </View>
+              </View>
+            </CardHeader>
+            
+            <CardContent style={styles.vehicleContent}>
+              <View style={styles.vehicleStatus}>
+                <Text style={styles.vehicleTitle}>{statusConfig.title}</Text>
+                <Text style={styles.vehicleSubtitle}>{statusConfig.subtitle}</Text>
+                <Badge variant={statusConfig.badgeVariant} style={styles.statusBadge}>
+                  {statusConfig.badgeText}
+                </Badge>
+              </View>
+            </CardContent>
+          </Card>
 
           {/* Action Buttons */}
           <View style={styles.actionContainer}>
-            <ActionButton
-              title="BLOQUEAR"
-              icon={<Lock size={32} color={colors.neutral.white} strokeWidth={2.5} />}
+            <Button
               onPress={() => handleVehicleAction('lock')}
               disabled={!isConnected || isProcessing || vehicleState === 'locked'}
               loading={isProcessing && vehicleState !== 'locked'}
-              style={[styles.actionButton, styles.lockButton]}
-              type="lock"
-            />
+              variant="destructive"
+              size="lg"
+              style={styles.actionButton}
+            >
+              <View style={styles.buttonContent}>
+                <Lock size={24} color={colors.destructive[50]} strokeWidth={2} />
+                <Text style={styles.buttonText}>BLOQUEAR</Text>
+              </View>
+            </Button>
 
-            <ActionButton
-              title="DESBLOQUEAR"
-              icon={<Unlock size={32} color={colors.neutral.white} strokeWidth={2.5} />}
+            <Button
               onPress={() => handleVehicleAction('unlock')}
               disabled={!isConnected || isProcessing || vehicleState === 'unlocked'}
               loading={isProcessing && vehicleState !== 'unlocked'}
-              style={[styles.actionButton, styles.unlockButton]}
-              type="unlock"
-            />
+              variant="default"
+              size="lg"
+              style={styles.actionButton}
+            >
+              <View style={styles.buttonContent}>
+                <Unlock size={24} color={colors.primary[50]} strokeWidth={2} />
+                <Text style={styles.buttonText}>DESBLOQUEAR</Text>
+              </View>
+            </Button>
           </View>
 
           {/* Emergency Info */}
-          <View style={styles.emergencyInfo}>
-            <Shield size={16} color={colors.neutral.medium} />
-            <Text style={styles.emergencyText}>
-              En caso de emergencia, contacte al administrador
-            </Text>
-          </View>
-        </View>
+          <Card variant="outline" style={styles.emergencyCard}>
+            <CardContent style={styles.emergencyContent}>
+              <Shield size={16} color={colors.secondary[400]} />
+              <Text style={styles.emergencyText}>
+                En caso de emergencia, contacte al administrador del sistema
+              </Text>
+            </CardContent>
+          </Card>
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -196,73 +272,142 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: spacing.large,
-    paddingBottom: spacing.medium,
+  scrollView: {
+    flex: 1,
   },
-  headerContent: {
+  scrollContent: {
+    paddingHorizontal: spacing[6],
+    paddingBottom: spacing[6],
+  },
+  header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: spacing[4],
+    marginBottom: spacing[6],
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    backgroundColor: colors.primary[100],
+    borderRadius: borderRadius.full,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing[3],
   },
   welcomeText: {
-    ...typography.caption.medium,
-    color: colors.neutral.light,
+    ...typography.label.default,
+    color: colors.secondary[500],
   },
   usernameText: {
-    ...typography.heading.medium,
-    color: colors.neutral.white,
+    ...typography.heading.h4,
+    color: colors.foreground,
   },
-  logoutButton: {
-    padding: spacing.small,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  headerRight: {
+    flexDirection: 'row',
+    gap: spacing[2],
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: spacing.large,
-  },
-  bluetoothStatus: {
+  headerButton: {
+    width: 40,
+    height: 40,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.lg,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: spacing.large,
+    ...shadows.sm,
   },
-  bluetoothIndicator: {
+  bluetoothCard: {
+    marginBottom: spacing[4],
+  },
+  bluetoothContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing[2],
+  },
+  bluetoothInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: spacing.medium,
-    paddingVertical: spacing.small,
-    borderRadius: 20,
   },
   bluetoothText: {
-    ...typography.caption.medium,
-    marginLeft: spacing.small,
+    ...typography.body.default,
+    color: colors.foreground,
+    marginLeft: spacing[3],
+  },
+  vehicleCard: {
+    marginBottom: spacing[6],
+  },
+  vehicleHeader: {
+    alignItems: 'center',
+    paddingBottom: spacing[4],
+  },
+  vehicleIconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusIconOverlay: {
+    position: 'absolute',
+    bottom: -8,
+    right: -8,
+    backgroundColor: colors.background,
+    borderRadius: borderRadius.full,
+    padding: spacing[2],
+    ...shadows.md,
+  },
+  vehicleContent: {
+    paddingTop: 0,
+  },
+  vehicleStatus: {
+    alignItems: 'center',
+  },
+  vehicleTitle: {
+    ...typography.heading.h3,
+    color: colors.foreground,
+    textAlign: 'center',
+    marginBottom: spacing[2],
+  },
+  vehicleSubtitle: {
+    ...typography.body.default,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    marginBottom: spacing[4],
+  },
+  statusBadge: {
+    alignSelf: 'center',
   },
   actionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.large,
+    gap: spacing[4],
+    marginBottom: spacing[6],
   },
   actionButton: {
-    width: width * 0.7,
-    height: 80,
+    height: 64,
   },
-  lockButton: {},
-  unlockButton: {},
-  emergencyInfo: {
+  buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.medium,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    borderRadius: 8,
-    marginBottom: spacing.large,
+    gap: spacing[3],
+  },
+  buttonText: {
+    ...typography.button.large,
+    fontWeight: '600',
+  },
+  emergencyCard: {
+    marginBottom: spacing[4],
+  },
+  emergencyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing[2],
   },
   emergencyText: {
-    ...typography.caption.small,
-    color: colors.neutral.medium,
-    marginLeft: spacing.small,
-    textAlign: 'center',
+    ...typography.body.small,
+    color: colors.mutedForeground,
+    marginLeft: spacing[3],
+    flex: 1,
   },
 });
