@@ -12,19 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { 
-  Lock, 
-  Unlock, 
-  LogOut, 
-  Bluetooth, 
-  BluetoothOff, 
-  Car, 
-  Shield, 
-  ShieldCheck,
-  AlertTriangle,
-  Settings,
-  User,
-} from 'lucide-react-native';
+import { Lock, Clock as Unlock, LogOut, Bluetooth, BluetoothOff, Car, Shield, ShieldCheck, TriangleAlert as AlertTriangle, Settings, User } from 'lucide-react-native';
 import { colors, typography, spacing, borderRadius, shadows } from '@/styles';
 import { BluetoothService } from '@/services/BluetoothService';
 import { AuthService } from '@/services/AuthService';
