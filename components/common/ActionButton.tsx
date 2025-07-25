@@ -98,14 +98,14 @@ export function ActionButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 16,
+    borderRadius: 12,
     paddingVertical: spacing.medium,
     paddingHorizontal: spacing.large,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-    minHeight: 80,
+    minHeight: 70,
     justifyContent: 'center',
   },
   buttonDisabled: {
@@ -118,10 +118,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconContainer: {
-    marginRight: spacing.medium,
+    marginRight: spacing.small,
   },
   buttonText: {
-    ...typography.button.large,
+    ...typography.button.medium,
     color: colors.neutral.white,
     textAlign: 'center',
   },

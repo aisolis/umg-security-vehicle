@@ -157,7 +157,7 @@ export default function MainScreen() {
           <View style={styles.actionContainer}>
             <ActionButton
               title="BLOQUEAR"
-              icon={<Lock size={32} color={colors.neutral.white} strokeWidth={2.5} />}
+              icon={<Lock size={28} color={colors.neutral.white} strokeWidth={2.5} />}
               onPress={() => handleVehicleAction('lock')}
               disabled={!isConnected || isProcessing || vehicleState === 'locked'}
               loading={isProcessing && vehicleState !== 'locked'}
@@ -167,7 +167,7 @@ export default function MainScreen() {
 
             <ActionButton
               title="DESBLOQUEAR"
-              icon={<Unlock size={32} color={colors.neutral.white} strokeWidth={2.5} />}
+              icon={<Unlock size={28} color={colors.neutral.white} strokeWidth={2.5} />}
               onPress={() => handleVehicleAction('unlock')}
               disabled={!isConnected || isProcessing || vehicleState === 'unlocked'}
               loading={isProcessing && vehicleState !== 'unlocked'}
@@ -245,8 +245,8 @@ const styles = StyleSheet.create({
     gap: spacing.large,
   },
   actionButton: {
-    width: width * 0.7,
-    height: 80,
+    width: width * 0.6,
+    height: 70,
   },
   lockButton: {},
   unlockButton: {},

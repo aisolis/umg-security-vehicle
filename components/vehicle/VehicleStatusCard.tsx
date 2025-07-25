@@ -41,11 +41,11 @@ export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps
   const statusConfig = getStatusConfig();
 
   return (
-    <View style={[styles.container, shadows.medium]}>
+    <View style={[styles.container, shadows.small]}>
       <View style={styles.content}>
         {/* Vehicle Icon */}
         <View style={styles.vehicleIcon}>
-          <Car size={64} color={colors.neutral.dark} strokeWidth={1.5} />
+          <Car size={48} color={colors.neutral.dark} strokeWidth={1.5} />
         </View>
 
         {/* Status Icon */}
@@ -98,28 +98,28 @@ export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.neutral.white,
-    borderRadius: 16,
-    marginVertical: spacing.large,
+    borderRadius: 12,
+    marginVertical: spacing.medium,
     overflow: 'hidden',
   },
   content: {
-    padding: spacing.large,
+    padding: spacing.medium,
     alignItems: 'center',
   },
   vehicleIcon: {
-    marginBottom: spacing.medium,
+    marginBottom: spacing.small,
   },
   statusIcon: {
-    padding: spacing.medium,
+    padding: spacing.small,
     borderRadius: 50,
-    marginBottom: spacing.medium,
+    marginBottom: spacing.small,
   },
   statusText: {
     alignItems: 'center',
-    marginBottom: spacing.medium,
+    marginBottom: spacing.small,
   },
   statusTitle: {
-    ...typography.heading.small,
+    ...typography.body.large,
     color: colors.neutral.dark,
     textAlign: 'center',
     marginBottom: spacing.xsmall,
@@ -132,14 +132,14 @@ const styles = StyleSheet.create({
   connectionIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.medium,
+    paddingHorizontal: spacing.small,
     paddingVertical: spacing.small,
-    borderRadius: 16,
+    borderRadius: 12,
   },
   connectionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     marginRight: spacing.small,
   },
   connectionText: {
