@@ -30,20 +30,17 @@ export default function MainScreen() {
   const [userInfo, setUserInfo] = useState<{ username: string } | null>(null);
 
   useEffect(() => {
-    // Obtener información del usuario
     const user = AuthService.getCurrentUser();
     setUserInfo(user);
 
-    // Inicializar conexión Bluetooth (simulada)
     initializeBluetoothConnection();
   }, []);
 
   const initializeBluetoothConnection = async () => {
     try {
-      // Simulación de conexión Bluetooth
       await BluetoothService.initialize();
       setIsConnected(true);
-      setVehicleState('locked'); // Estado inicial del vehículo
+      setVehicleState('locked'); 
     } catch (error) {
       console.log('Bluetooth initialization failed:', error);
       setIsConnected(false);
@@ -66,13 +63,12 @@ export default function MainScreen() {
     triggerHapticFeedback();
 
     try {
-      // Simulación de comando vía Bluetooth
       const success = await BluetoothService.sendCommand(action);
       
       if (success) {
         setVehicleState(action === 'lock' ? 'locked' : 'unlocked');
         
-        // Feedback háptico de éxito
+        
         if (Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }

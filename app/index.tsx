@@ -53,7 +53,6 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
-      // Simulación de login con servicio de autenticación
       const success = await AuthService.login(credentials.username, credentials.password);
       
       if (success) {
@@ -228,7 +227,7 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: colors.neutral.white,
-    paddingHorizontal: spacing.large + 32, // Extra space for icon
+    paddingHorizontal: spacing.large + 32,
     paddingVertical: spacing.medium,
     borderRadius: 12,
     fontSize: 16,

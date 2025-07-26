@@ -20,14 +20,12 @@ class AuthServiceClass {
   private isAuthenticated: boolean = false;
 
   /**
-   * Método de login simulado
+   * Método de login 
    * TODO: Integrar con microservicio real
    */
   async login(username: string, password: string): Promise<boolean> {
-    // Simulación de delay de red
     await new Promise(resolve => setTimeout(resolve, 1500));
     
-    // Validación simulada - En producción, esto debe ser llamada a API
     if (username.length >= 3 && password.length >= 6) {
       this.currentUser = {
         id: 'user_' + Date.now(),
@@ -69,7 +67,6 @@ class AuthServiceClass {
    * TODO: Implementar renovación de JWT
    */
   async refreshToken(): Promise<boolean> {
-    // Stub para renovación de token
     return this.isAuthenticated;
   }
 
