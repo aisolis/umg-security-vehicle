@@ -12,12 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { Lock, Clock as Unlock, LogOut, Bluetooth, BluetoothOff, Car, Shield, ShieldCheck } from 'lucide-react-native';
+import { Lock, Clock as Unlock, LogOut, Shield } from 'lucide-react-native';
 import { colors, typography, spacing } from '@/styles';
-import { BluetoothService } from '@/services/BluetoothService';
 import { AuthService } from '@/services/AuthService';
 import { VehicleStatusCard } from '@/components/vehicle/VehicleStatusCard';
 import { ActionButton } from '@/components/common/ActionButton';
+import { HC06ConnectionCard } from '@/components/bluetooth/HC06ConnectionCard';
+import { useHC06Bluetooth } from '@/hooks/useHC06Bluetooth';
 
 const { width } = Dimensions.get('window');
 
@@ -25,26 +26,59 @@ type VehicleState = 'locked' | 'unlocked' | 'unknown';
 
 export default function MainScreen() {
   const [vehicleState, setVehicleState] = useState<VehicleState>('unknown');
-  const [isConnected, setIsConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [userInfo, setUserInfo] = useState<{ username: string } | null>(null);
+
+  // Hook para manejar Bluetooth HC-06
+  const {
+    isConnected,
+    isConnecting,
+    isScanning,
+    connectedDevice,
+    error,
+    lastConnected,
+    initialize,
+    connect,
+    disconnect,
+    sendCommand,
+    clearError,
+  } = useHC06Bluetooth();
 
   useEffect(() => {
     const user = AuthService.getCurrentUser();
     setUserInfo(user);
 
-    initializeBluetoothConnection();
+    // Inicializar Bluetooth automáticamente
+    initializeBluetooth();
   }, []);
 
-  const initializeBluetoothConnection = async () => {
+  const initializeBluetooth = async () => {
     try {
-      await BluetoothService.initialize();
-      setIsConnected(true);
-      setVehicleState('locked'); 
+      const success = await initialize();
+      if (success) {
+        console.log('✅ Bluetooth inicializado correctamente');
+      }
     } catch (error) {
-      console.log('Bluetooth initialization failed:', error);
-      setIsConnected(false);
+      console.error('❌ Error inicializando Bluetooth:', error);
     }
+  };
+
+  const handleConnect = async () => {
+    clearError();
+    const success = await connect();
+    if (success) {
+      setVehicleState('locked'); // Estado inicial cuando se conecta
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await disconnect();
+    setVehicleState('unknown');
+  };
+
+  const handleRetry = async () => {
+    clearError();
+    await handleConnect();
   };
 
   const triggerHapticFeedback = () => {
@@ -55,7 +89,7 @@ export default function MainScreen() {
 
   const handleVehicleAction = async (action: 'lock' | 'unlock') => {
     if (!isConnected) {
-      Alert.alert('Sin Conexión', 'No hay conexión Bluetooth disponible');
+      Alert.alert('Sin Conexión', 'Debe conectarse al dispositivo Command-Receiver primero');
       return;
     }
 
@@ -63,11 +97,12 @@ export default function MainScreen() {
     triggerHapticFeedback();
 
     try {
-      const success = await BluetoothService.sendCommand(action);
+      // Enviar comando específico al HC-06
+      const command = action === 'lock' ? 'LOCK' : 'UNLOCK';
+      const success = await sendCommand(command);
       
       if (success) {
         setVehicleState(action === 'lock' ? 'locked' : 'unlocked');
-        
         
         if (Platform.OS !== 'web') {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -75,13 +110,13 @@ export default function MainScreen() {
         
         Alert.alert(
           'Éxito',
-          `Vehículo ${action === 'lock' ? 'bloqueado' : 'desbloqueado'} correctamente`
+          `Comando ${command} enviado correctamente al Command-Receiver`
         );
       } else {
-        Alert.alert('Error', 'No se pudo completar la acción. Intente nuevamente.');
+        Alert.alert('Error', 'No se pudo enviar el comando. Intente nuevamente.');
       }
     } catch (error) {
-      Alert.alert('Error', 'Error de comunicación con el vehículo');
+      Alert.alert('Error', 'Error de comunicación con el dispositivo HC-06');
     } finally {
       setIsProcessing(false);
     }
@@ -97,6 +132,10 @@ export default function MainScreen() {
           text: 'Cerrar Sesión',
           style: 'destructive',
           onPress: () => {
+            // Desconectar Bluetooth antes de cerrar sesión
+            if (isConnected) {
+              disconnect();
+            }
             AuthService.logout();
             router.replace('/');
           },
@@ -126,22 +165,18 @@ export default function MainScreen() {
 
         {/* Main Content */}
         <View style={styles.content}>
-          {/* Bluetooth Status */}
-          <View style={styles.bluetoothStatus}>
-            <View style={styles.bluetoothIndicator}>
-              {isConnected ? (
-                <Bluetooth size={20} color={colors.success.main} />
-              ) : (
-                <BluetoothOff size={20} color={colors.error.main} />
-              )}
-              <Text style={[
-                styles.bluetoothText,
-                { color: isConnected ? colors.success.main : colors.error.main }
-              ]}>
-                {isConnected ? 'Conectado' : 'Sin Conexión'}
-              </Text>
-            </View>
-          </View>
+          {/* HC-06 Connection Card */}
+          <HC06ConnectionCard
+            isConnected={isConnected}
+            isConnecting={isConnecting}
+            isScanning={isScanning}
+            connectedDevice={connectedDevice}
+            error={error}
+            lastConnected={lastConnected}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
+            onRetry={handleRetry}
+          />
 
           {/* Vehicle Status Card */}
           <VehicleStatusCard 
@@ -176,7 +211,7 @@ export default function MainScreen() {
           <View style={styles.emergencyInfo}>
             <Shield size={16} color={colors.neutral.medium} />
             <Text style={styles.emergencyText}>
-              En caso de emergencia, contacte al administrador
+              Dispositivo: HC-06 "Command-Receiver" | PIN: 2025
             </Text>
           </View>
         </View>
@@ -217,22 +252,6 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: spacing.large,
-  },
-  bluetoothStatus: {
-    alignItems: 'center',
-    marginBottom: spacing.large,
-  },
-  bluetoothIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    paddingHorizontal: spacing.medium,
-    paddingVertical: spacing.small,
-    borderRadius: 20,
-  },
-  bluetoothText: {
-    ...typography.caption.medium,
-    marginLeft: spacing.small,
   },
   actionContainer: {
     flex: 1,
