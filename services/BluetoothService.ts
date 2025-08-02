@@ -5,7 +5,6 @@
 
 import { BleManager, Device, State } from 'react-native-ble-plx';
 import { PermissionsAndroid, Platform, Alert } from 'react-native';
-import { encode } from 'react-native-base64';
 
 type VehicleCommand = 'lock' | 'unlock' | 'status';
 type CommandResponse = {
@@ -20,6 +19,28 @@ class BluetoothServiceClass {
   private isConnected: boolean = false;
   private connectedDevice: Device | null = null;
   private scanSubscription: any = null;
+
+  // Función helper para convertir string a base64
+  private stringToBase64(str: string): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let result = '';
+    let i = 0;
+    
+    while (i < str.length) {
+      let a = str.charCodeAt(i++);
+      let b = i < str.length ? str.charCodeAt(i++) : 0;
+      let c = i < str.length ? str.charCodeAt(i++) : 0;
+      
+      let bitmap = (a << 16) | (b << 8) | c;
+      
+      result += chars.charAt((bitmap >> 18) & 63);
+      result += chars.charAt((bitmap >> 12) & 63);
+      result += i - 2 < str.length ? chars.charAt((bitmap >> 6) & 63) : '=';
+      result += i - 1 < str.length ? chars.charAt(bitmap & 63) : '=';
+    }
+    
+    return result;
+  }
   
   // Configuración específica para dispositivos BLE del vehículo
   private readonly VEHICLE_DEVICE_PATTERNS = [
@@ -190,16 +211,16 @@ class BluetoothServiceClass {
 
     try {
       const commandMap = {
-        lock: 'LOCK\n',
-        unlock: 'UNLOCK\n',
-        status: 'STATUS\n',
+        lock: 'LOCK',
+        unlock: 'UNLOCK',
+        status: 'STATUS',
       };
       
       const commandString = commandMap[command];
-      console.log(`Enviando comando: ${commandString.trim()}`);
+      console.log(`Enviando comando: ${commandString}`);
       
       // Convertir comando a base64
-      const commandBase64 = encode(commandString);
+      const commandBase64 = this.stringToBase64(commandString);
       
       // Enviar comando a través de la característica RX
       await this.connectedDevice.writeCharacteristicWithResponseForService(

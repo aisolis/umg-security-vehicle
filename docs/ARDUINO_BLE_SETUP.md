@@ -111,6 +111,17 @@ void loop() {
 void processCommand(String command) {
   String response = "";
   
+  // Limpiar el comando de caracteres extra
+  command.trim();
+  command.replace("\n", "");
+  command.replace("\r", "");
+  
+  Serial.print("Comando limpio: '");
+  Serial.print(command);
+  Serial.print("' (longitud: ");
+  Serial.print(command.length());
+  Serial.println(")");
+  
   if (command == "LOCK") {
     // Lógica para bloquear el vehículo
     digitalWrite(LOCK_PIN, HIGH);
@@ -134,7 +145,17 @@ void processCommand(String command) {
     
   } else {
     response = "UNKNOWN_COMMAND";
-    Serial.println("❓ Comando desconocido: " + command);
+    Serial.print("❓ Comando desconocido: '");
+    Serial.print(command);
+    Serial.println("'");
+    
+    // Debug: mostrar cada carácter
+    Serial.print("Caracteres: ");
+    for (int i = 0; i < command.length(); i++) {
+      Serial.print((int)command.charAt(i));
+      Serial.print(" ");
+    }
+    Serial.println();
   }
 
   // Enviar respuesta
