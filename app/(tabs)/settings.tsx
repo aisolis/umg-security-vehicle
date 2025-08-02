@@ -23,6 +23,8 @@ import {
 import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
 import * as SecureStore from 'expo-secure-store';
+import { Toast } from '@/components/common/Toast';
+import { useToast } from '@/hooks/useToast';
 
 interface BiometricSettings {
   enabled: boolean;
@@ -36,6 +38,7 @@ export default function SettingsScreen() {
     preferredMethod: null,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const { toast, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
 
   useEffect(() => {
     loadUserInfo();
@@ -73,9 +76,10 @@ export default function SettingsScreen() {
       const capabilities = await AuthService.getBiometricCapabilities();
       
       if (!capabilities.hasHardware || !capabilities.isEnrolled) {
-        Alert.alert(
+        showError(
           'No Disponible',
-          'Este dispositivo no tiene autenticación biométrica configurada. Configure Face ID, Touch ID o huella digital en las opciones del sistema primero.'
+          'Este dispositivo no tiene autenticación biométrica configurada. Configure Touch ID o huella digital en las opciones del sistema primero.',
+          5000
         );
         return;
       }
@@ -84,9 +88,10 @@ export default function SettingsScreen() {
       if (await AuthService.isBiometricTypeAvailable('fingerprint')) {
         setupBiometric('fingerprint');
       } else {
-        Alert.alert(
+        showError(
           'No Disponible',
-          'La huella digital no está disponible en este dispositivo. Configure Touch ID o huella digital en las opciones del sistema primero.'
+          'La huella digital no está disponible en este dispositivo. Configure Touch ID o huella digital en las opciones del sistema primero.',
+          5000
         );
       }
     } else {
@@ -96,7 +101,7 @@ export default function SettingsScreen() {
         enabled: false,
         preferredMethod: null,
       });
-      Alert.alert('Éxito', 'Autenticación biométrica desactivada');
+      showSuccess('Éxito', 'Autenticación biométrica desactivada', 3000);
     }
   };
 
@@ -107,9 +112,10 @@ export default function SettingsScreen() {
       const isAvailable = await AuthService.isBiometricTypeAvailable(method);
       
       if (!isAvailable) {
-        Alert.alert(
+        showError(
           'No Disponible',
-          'La huella digital no está disponible en este dispositivo. Verifique que esté configurado en las opciones del sistema.'
+          'La huella digital no está disponible en este dispositivo. Verifique que esté configurado en las opciones del sistema.',
+          5000
         );
         return;
       }
@@ -124,14 +130,19 @@ export default function SettingsScreen() {
           preferredMethod: method,
         });
 
-        Alert.alert(
-          'Configuración Exitosa', 
-          'Huella digital configurada correctamente. Ahora podrá usarla para iniciar sesión.'
+        showSuccess(
+          'Configuración Exitosa',
+          'Huella digital configurada correctamente. Ahora podrá usarla para iniciar sesión.',
+          4000
         );
       }
     } catch (error: any) {
       console.error('Error setting up biometric:', error);
-      Alert.alert('Error', error.message || 'No se pudo configurar la autenticación biométrica');
+      showError(
+        'Error',
+        error.message || 'No se pudo configurar la autenticación biométrica',
+        5000
+      );
     } finally {
       setIsLoading(false);
     }
@@ -241,6 +252,16 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
+      
+      {/* Toast Component */}
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        duration={toast.duration}
+        onHide={hideToast}
+      />
     </LinearGradient>
   );
 }

@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Car, Shield, ShieldCheck, TriangleAlert as AlertTriangle } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Animated } from 'react-native';
+import { Car, Shield, ShieldCheck, TriangleAlert as AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { colors, typography, spacing, shadows } from '@/styles';
 
 interface VehicleStatusCardProps {
   state: 'locked' | 'unlocked' | 'unknown';
   isConnected: boolean;
+  isSearching?: boolean;
+  onRetryConnection?: () => void;
 }
 
-export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps) {
+export function VehicleStatusCard({ state, isConnected, isSearching = false, onRetryConnection }: VehicleStatusCardProps) {
   const getStatusConfig = () => {
     switch (state) {
       case 'locked':
@@ -28,10 +30,19 @@ export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps
           borderColor: colors.warning.main,
         };
       default:
+        if (isSearching) {
+          return {
+            icon: <ActivityIndicator size="large" color={colors.info.main} />,
+            title: 'Buscando Arduino...',
+            subtitle: 'Escaneando dispositivos cercanos',
+            backgroundColor: colors.info.light,
+            borderColor: colors.info.main,
+          };
+        }
         return {
           icon: <AlertTriangle size={48} color={colors.neutral.medium} strokeWidth={2} />,
           title: 'Estado Desconocido',
-          subtitle: isConnected ? 'Verificando estado...' : 'Sin conexión',
+          subtitle: isConnected ? 'Verificando estado...' : 'Sin conexión - Toque para reconectar',
           backgroundColor: colors.neutral.light,
           borderColor: colors.neutral.medium,
         };
@@ -39,9 +50,23 @@ export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps
   };
 
   const statusConfig = getStatusConfig();
+  
+  // Determinar si la card debe ser clickeable
+  const isClickable = !isConnected && !isSearching && onRetryConnection;
+
+  const CardComponent = isClickable ? TouchableOpacity : View;
 
   return (
-    <View style={[styles.container, shadows.small]}>
+    <CardComponent 
+      style={[
+        styles.container, 
+        shadows.small,
+        isClickable && styles.clickableCard,
+        isSearching && styles.searchingCard
+      ]}
+      onPress={isClickable ? onRetryConnection : undefined}
+      activeOpacity={isClickable ? 0.7 : 1}
+    >
       <View style={styles.content}>
         {/* Vehicle Icon */}
         <View style={styles.vehicleIcon}>
@@ -66,32 +91,48 @@ export function VehicleStatusCard({ state, isConnected }: VehicleStatusCardProps
         <View style={[
           styles.connectionIndicator,
           {
-            backgroundColor: isConnected 
-              ? colors.success.main + '20' 
-              : colors.error.main + '20'
+            backgroundColor: isSearching
+              ? colors.info.main + '20'
+              : isConnected 
+                ? colors.success.main + '20' 
+                : colors.error.main + '20'
           }
         ]}>
-          <View style={[
-            styles.connectionDot,
-            {
-              backgroundColor: isConnected 
-                ? colors.success.main 
-                : colors.error.main
-            }
-          ]} />
+          {isSearching ? (
+            <ActivityIndicator size="small" color={colors.info.main} style={{ marginRight: spacing.small }} />
+          ) : (
+            <View style={[
+              styles.connectionDot,
+              {
+                backgroundColor: isConnected 
+                  ? colors.success.main 
+                  : colors.error.main
+              }
+            ]} />
+          )}
           <Text style={[
             styles.connectionText,
             {
-              color: isConnected 
-                ? colors.success.dark 
-                : colors.error.dark
+              color: isSearching
+                ? colors.info.dark
+                : isConnected 
+                  ? colors.success.dark 
+                  : colors.error.dark
             }
           ]}>
-            {isConnected ? 'Conectado' : 'Desconectado'}
+            {isSearching ? 'Buscando...' : isConnected ? 'Conectado' : 'Desconectado'}
           </Text>
         </View>
+
+        {/* Hint for retry when clickable */}
+        {isClickable && (
+          <View style={styles.retryHint}>
+            <RefreshCw size={16} color={colors.accent.main} />
+            <Text style={styles.retryHintText}>Toque para reconectar</Text>
+          </View>
+        )}
       </View>
-    </View>
+    </CardComponent>
   );
 }
 
@@ -144,6 +185,30 @@ const styles = StyleSheet.create({
   },
   connectionText: {
     ...typography.caption.medium,
+    fontWeight: '500',
+  },
+  clickableCard: {
+    borderWidth: 2,
+    borderColor: colors.accent.main + '40',
+    borderStyle: 'dashed',
+  },
+  searchingCard: {
+    borderWidth: 2,
+    borderColor: colors.info.main + '60',
+  },
+  retryHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.small,
+    paddingHorizontal: spacing.small,
+    paddingVertical: spacing.xsmall,
+    backgroundColor: colors.accent.main + '10',
+    borderRadius: 8,
+  },
+  retryHintText: {
+    ...typography.caption.small,
+    color: colors.accent.dark,
+    marginLeft: spacing.xsmall,
     fontWeight: '500',
   },
 });

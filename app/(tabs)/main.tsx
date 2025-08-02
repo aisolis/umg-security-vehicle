@@ -19,6 +19,8 @@ import { BluetoothService } from '@/services/BluetoothService';
 import { AuthService } from '@/services/AuthService';
 import { VehicleStatusCard } from '@/components/vehicle/VehicleStatusCard';
 import { ActionButton } from '@/components/common/ActionButton';
+import { Toast } from '@/components/common/Toast';
+import { useToast } from '@/hooks/useToast';
 
 const { width } = Dimensions.get('window');
 
@@ -28,7 +30,9 @@ export default function MainScreen() {
   const [vehicleState, setVehicleState] = useState<VehicleState>('unknown');
   const [isConnected, setIsConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
+  const { toast, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
 
   useEffect(() => {
     const user = AuthService.getCurrentUser();
@@ -76,16 +80,24 @@ export default function MainScreen() {
 
   const initializeBluetoothConnection = async () => {
     try {
+      setIsSearching(true);
       console.log('🔵 Inicializando Bluetooth...');
+      
       const initialized = await BluetoothService.initialize();
       
       if (!initialized) {
         console.log('❌ Bluetooth initialization failed');
         setIsConnected(false);
+        setIsSearching(false);
         return;
       }
 
       console.log('✅ Bluetooth initialized, buscando Arduino...');
+      showInfo(
+        'Buscando Arduino',
+        'Escaneando dispositivos cercanos...',
+        3000
+      );
       
       // Intentar conectar al Arduino
       const connected = await BluetoothService.autoConnect();
@@ -95,18 +107,21 @@ export default function MainScreen() {
         console.log('✅ Conectado al Arduino:', device?.name);
         setIsConnected(true);
         setVehicleState('locked');
+        
+        showSuccess(
+          'Arduino Conectado',
+          `Conectado a ${device?.name || 'dispositivo'}`,
+          3000
+        );
       } else {
         console.log('❌ No se pudo conectar al Arduino');
         setIsConnected(false);
         
-        // Mostrar alerta al usuario
-        Alert.alert(
+        // Mostrar toast de error al usuario
+        showError(
           'Arduino no encontrado',
           'No se pudo conectar al Arduino. Asegúrate de que esté encendido y cerca.',
-          [
-            { text: 'Reintentar', onPress: () => initializeBluetoothConnection() },
-            { text: 'Cancelar', style: 'cancel' }
-          ]
+          6000
         );
       }
       
@@ -114,10 +129,13 @@ export default function MainScreen() {
       console.log('❌ Error durante conexión Bluetooth:', error);
       setIsConnected(false);
       
-      Alert.alert(
+      showError(
         'Error de Bluetooth',
-        'Error al conectar con el dispositivo. Revisa los permisos y que el Bluetooth esté activado.'
+        'Error al conectar con el dispositivo. Revisa los permisos y que el Bluetooth esté activado.',
+        5000
       );
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -135,14 +153,12 @@ export default function MainScreen() {
       // Actualizar UI inmediatamente si la conexión se perdió
       setIsConnected(false);
       
-      Alert.alert(
-        'Sin Conexión', 
-        'No hay conexión con el Arduino. ¿Desea intentar reconectar?',
-        [
-          { text: 'Reconectar', onPress: () => initializeBluetoothConnection() },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
+      showWarning(
+        'Sin Conexión',
+        'No hay conexión con el Arduino. Toque la tarjeta de estado para reconectar.',
+        5000
       );
+      
       return;
     }
 
@@ -161,23 +177,26 @@ export default function MainScreen() {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
         
-        Alert.alert(
-          'Éxito',
-          `Vehículo ${action === 'lock' ? 'bloqueado' : 'desbloqueado'} correctamente`
+        showSuccess(
+          '¡Éxito!',
+          `Vehículo ${action === 'lock' ? 'bloqueado' : 'desbloqueado'} correctamente`,
+          3000
         );
       } else {
         console.log(`❌ Error enviando comando ${action}`);
-        Alert.alert('Error', 'No se pudo completar la acción. Verifique la conexión.');
+        showError(
+          'Error',
+          'No se pudo completar la acción. Verifique la conexión.',
+          4000
+        );
       }
     } catch (error) {
       console.log('❌ Error durante envío de comando:', error);
-      Alert.alert(
-        'Error de Comunicación', 
-        'Error al comunicarse con el Arduino. ¿Desea intentar reconectar?',
-        [
-          { text: 'Reconectar', onPress: () => initializeBluetoothConnection() },
-          { text: 'Cancelar', style: 'cancel' }
-        ]
+      
+      showError(
+        'Error de Comunicación',
+        'Error al comunicarse con el Arduino. Toque la tarjeta de estado para reconectar.',
+        5000
       );
     } finally {
       setIsProcessing(false);
@@ -244,6 +263,8 @@ export default function MainScreen() {
           <VehicleStatusCard 
             state={vehicleState}
             isConnected={isConnected}
+            isSearching={isSearching}
+            onRetryConnection={initializeBluetoothConnection}
           />
 
           {/* Action Buttons */}
@@ -278,6 +299,16 @@ export default function MainScreen() {
           </View>
         </View>
       </SafeAreaView>
+      
+      {/* Toast Component */}
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        duration={toast.duration}
+        onHide={hideToast}
+      />
     </LinearGradient>
   );
 }

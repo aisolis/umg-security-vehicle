@@ -17,6 +17,8 @@ import { Lock, Mail, Eye, EyeOff, Fingerprint, Smartphone } from 'lucide-react-n
 import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
 import * as SecureStore from 'expo-secure-store';
+import { Toast } from '@/components/common/Toast';
+import { useToast } from '@/hooks/useToast';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,6 +33,7 @@ export default function LoginScreen() {
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [activeBiometricMethod, setActiveBiometricMethod] = useState<'fingerprint' | null>(null);
   const [showTraditionalLogin, setShowTraditionalLogin] = useState(true);
+  const { toast, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
 
   useEffect(() => {
     checkBiometricAvailability();
@@ -63,9 +66,10 @@ export default function LoginScreen() {
       // Verificar que el método esté disponible
       const isAvailable = await AuthService.isBiometricTypeAvailable(method);
       if (!isAvailable) {
-        Alert.alert(
+        showError(
           'No Disponible',
-          'La huella digital no está disponible en este dispositivo.'
+          'La huella digital no está disponible en este dispositivo.',
+          4000
         );
         return;
       }
@@ -79,7 +83,11 @@ export default function LoginScreen() {
       }
     } catch (error: any) {
       console.error('❌ Error en biometric login:', error);
-      Alert.alert('Error', error.message || 'Error en autenticación biométrica');
+      showError(
+        'Error',
+        error.message || 'Error en autenticación biométrica',
+        4000
+      );
     } finally {
       setIsLoading(false);
     }
@@ -119,13 +127,14 @@ export default function LoginScreen() {
         console.log('✅ Login exitoso, navegando a main');
         router.replace('/(tabs)/main');
       } else {
-        Alert.alert('Error', 'Credenciales incorrectas');
+        showError('Error', 'Credenciales incorrectas', 4000);
       }
     } catch (error: any) {
       console.error('❌ Error en login:', error);
-      Alert.alert(
-        'Error de Autenticación', 
-        error.message || 'Error de conexión. Verifique su internet e intente nuevamente.'
+      showError(
+        'Error de Autenticación',
+        error.message || 'Error de conexión. Verifique su internet e intente nuevamente.',
+        5000
       );
     } finally {
       setIsLoading(false);
@@ -302,6 +311,16 @@ export default function LoginScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      
+      {/* Toast Component */}
+      <Toast
+        visible={toast.visible}
+        type={toast.type}
+        title={toast.title}
+        message={toast.message}
+        duration={toast.duration}
+        onHide={hideToast}
+      />
     </LinearGradient>
   );
 }

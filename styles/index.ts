@@ -30,6 +30,11 @@ export const colors = {
     dark: '#D68910',
     light: '#F8C471',
   },
+  info: {
+    main: '#3498DB',
+    dark: '#2980B9',
+    light: '#85C1E9',
+  },
   neutral: {
     white: '#FFFFFF',
     light: '#F8F9FA',
