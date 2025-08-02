@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,9 +13,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Lock, Mail, Eye, EyeOff } from 'lucide-react-native';
+import { Lock, Mail, Eye, EyeOff, Fingerprint, Smartphone } from 'lucide-react-native';
 import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
+import * as SecureStore from 'expo-secure-store';
 
 const { width, height } = Dimensions.get('window');
 
@@ -27,6 +28,66 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  useEffect(() => {
+    checkBiometricAvailability();
+  }, []);
+
+  const checkBiometricAvailability = async () => {
+    try {
+      const settings = await AuthService.getBiometricSettings();
+      setBiometricAvailable(settings.enabled);
+    } catch (error) {
+      console.log('No biometric settings found:', error);
+    }
+  };
+
+  const handleBiometricLogin = async (method: 'fingerprint' | 'face' | 'pin') => {
+    try {
+      setIsLoading(true);
+      console.log(`🔐 Autenticación biométrica: ${method}`);
+      
+      // Verificar que el método esté disponible
+      const isAvailable = await AuthService.isBiometricTypeAvailable(method);
+      if (!isAvailable) {
+        Alert.alert(
+          'No Disponible',
+          `${method === 'fingerprint' ? 'Huella digital' : method === 'face' ? 'Face ID' : 'PIN'} no está disponible en este dispositivo.`
+        );
+        return;
+      }
+
+      // Ejecutar autenticación biométrica
+      const result = await AuthService.authenticateWithBiometrics(method);
+      
+      if (result.success) {
+        // Cargar sesión existente si la autenticación fue exitosa
+        const hasSession = await AuthService.loginWithBiometrics();
+        
+        if (hasSession) {
+          console.log('✅ Biometric login successful, navegando a main');
+          router.replace('/(tabs)/main');
+        } else {
+          Alert.alert(
+            'Sesión No Encontrada',
+            'No hay una sesión previa guardada. Por favor inicie sesión con email y contraseña primero.'
+          );
+        }
+      } else {
+        // Autenticación biométrica falló
+        Alert.alert(
+          'Autenticación Fallida',
+          result.error || 'No se pudo verificar la identidad biométrica'
+        );
+      }
+    } catch (error: any) {
+      console.error('❌ Error en biometric login:', error);
+      Alert.alert('Error', error.message || 'Error en autenticación biométrica');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const validateForm = () => {
     const validation = AuthService.validateCredentials(credentials);
@@ -60,7 +121,7 @@ export default function LoginScreen() {
       
       if (success) {
         console.log('✅ Login exitoso, navegando a main');
-        router.replace('/main');
+        router.replace('/(tabs)/main');
       } else {
         Alert.alert('Error', 'Credenciales incorrectas');
       }
@@ -175,6 +236,46 @@ export default function LoginScreen() {
                   {isLoading ? 'Iniciando sesión...' : 'INICIAR SESIÓN'}
                 </Text>
               </TouchableOpacity>
+
+              {/* Biometric Options */}
+              {biometricAvailable && (
+                <View style={styles.biometricSection}>
+                  <View style={styles.divider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>o continuar con</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+                  
+                  <View style={styles.biometricButtons}>
+                    <TouchableOpacity
+                      style={styles.biometricButton}
+                      onPress={() => handleBiometricLogin('fingerprint')}
+                      disabled={isLoading}
+                    >
+                      <Fingerprint size={28} color={colors.neutral.white} />
+                      <Text style={styles.biometricButtonText}>Huella</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.biometricButton}
+                      onPress={() => handleBiometricLogin('face')}
+                      disabled={isLoading}
+                    >
+                      <Eye size={28} color={colors.neutral.white} />
+                      <Text style={styles.biometricButtonText}>Face ID</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.biometricButton}
+                      onPress={() => handleBiometricLogin('pin')}
+                      disabled={isLoading}
+                    >
+                      <Smartphone size={28} color={colors.neutral.white} />
+                      <Text style={styles.biometricButtonText}>PIN</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
             </View>
 
             {/* Footer */}
@@ -292,6 +393,45 @@ const styles = StyleSheet.create({
   loginButtonText: {
     ...typography.button.large,
     color: colors.neutral.white,
+  },
+  biometricSection: {
+    marginTop: spacing.xlarge,
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.large,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  dividerText: {
+    ...typography.caption.medium,
+    color: colors.neutral.light,
+    paddingHorizontal: spacing.medium,
+  },
+  biometricButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: spacing.medium,
+  },
+  biometricButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: spacing.large,
+    paddingHorizontal: spacing.medium,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  biometricButtonText: {
+    ...typography.caption.medium,
+    color: colors.neutral.white,
+    marginTop: spacing.small,
+    textAlign: 'center',
   },
   footer: {
     alignItems: 'center',
