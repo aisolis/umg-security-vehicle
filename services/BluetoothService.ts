@@ -20,6 +20,7 @@ class BluetoothServiceClass {
   private connectedDevice: Device | null = null;
   private scanSubscription: any = null;
   private heartbeatInterval: any = null;
+  private dynamicArduinoMAC: string | null = null;
 
   // Función helper para convertir string a base64
   private stringToBase64(str: string): string {
@@ -43,11 +44,12 @@ class BluetoothServiceClass {
     return result;
   }
   
+  // Arduino específico (cambiar por la MAC address de tu Arduino)
+  private readonly ARDUINO_MAC_ADDRESS = null; // null = usar escaneo, string = conectar directamente
+  
   // Configuración específica para dispositivos BLE del vehículo
   private readonly VEHICLE_DEVICE_PATTERNS = [
     'VehicleControl',     // Nombre personalizado del dispositivo
-    'HC-05',              // Módulo Bluetooth común
-    'HC-06',              // Módulo Bluetooth común
     'ESP32',              // Si usas ESP32 con Bluetooth
     'Arduino',            // Nombre genérico
   ];
@@ -182,43 +184,159 @@ class BluetoothServiceClass {
   }
 
   /**
+   * Conectar directamente al Arduino por MAC address (sin escaneo)
+   */
+  async connectDirectlyToArduino(macAddress: string): Promise<boolean> {
+    try {
+      console.log(`🎯 Conectando directamente al Arduino: ${macAddress}`);
+      
+      // Conectar directamente por MAC address
+      const device = await this.manager.connectToDevice(macAddress);
+      
+      console.log(`✅ Dispositivo encontrado: ${device.name || 'Sin nombre'}`);
+      
+      // Descubrir servicios y características
+      const deviceWithServices = await device.discoverAllServicesAndCharacteristics();
+      
+      // Verificar que tiene el servicio UART
+      const services = await deviceWithServices.services();
+      const hasVehicleService = services.some(service => 
+        service.uuid.toUpperCase() === this.VEHICLE_SERVICE_UUID.toUpperCase()
+      );
+      
+      if (!hasVehicleService) {
+        console.log(`❌ El dispositivo no tiene el servicio de vehículo requerido`);
+        await deviceWithServices.cancelConnection();
+        return false;
+      }
+      
+      this.connectedDevice = deviceWithServices;
+      this.isConnected = true;
+      
+      console.log(`✅ Conectado directamente al Arduino: ${device.name || macAddress}`);
+      
+      // Configurar listener para desconexión
+      deviceWithServices.onDisconnected((error, disconnectedDevice) => {
+        const deviceName = disconnectedDevice?.name || 'Arduino';
+        console.log(`🔌 Arduino desconectado: ${deviceName}`, error ? `Error: ${error.message}` : '');
+        this.isConnected = false;
+        this.connectedDevice = null;
+        this.stopHeartbeat();
+      });
+      
+      // Iniciar heartbeat
+      this.startHeartbeat();
+      
+      return true;
+      
+    } catch (error) {
+      console.error(`❌ Error conectando directamente al Arduino ${macAddress}:`, error);
+      this.isConnected = false;
+      this.connectedDevice = null;
+      return false;
+    }
+  }
+
+  /**
    * Buscar y conectar automáticamente al primer dispositivo del vehículo
    */
   async autoConnect(): Promise<boolean> {
     try {
-      console.log('Buscando dispositivos del vehículo...');
+      // Si hay MAC específica configurada, conectar directamente
+      const targetMAC = this.dynamicArduinoMAC || this.ARDUINO_MAC_ADDRESS;
+      if (targetMAC) {
+        console.log(`🎯 Usando conexión directa al Arduino: ${targetMAC}`);
+        return await this.connectDirectlyToArduino(targetMAC);
+      }
+      
+      // Fallback al método de escaneo
+      console.log('🔍 Buscando dispositivos del vehículo...');
       
       const availableDevices = await this.scanDevices();
       const vehicleDevices = this.filterVehicleDevices(availableDevices);
       
       if (vehicleDevices.length === 0) {
-        console.log('No se encontraron dispositivos del vehículo');
+        console.log('❌ No se encontraron dispositivos del vehículo');
         return false;
       }
       
-      // Intentar conectar al dispositivo con mejor señal
-      const bestDevice = vehicleDevices[0];
-      console.log(`Intentando conectar a: ${bestDevice.name}`);
+      console.log(`📱 Encontrados ${vehicleDevices.length} dispositivos potenciales`);
       
-      return await this.connectToDevice(bestDevice);
+      // Intentar conectar a cada dispositivo en orden de señal
+      for (let i = 0; i < vehicleDevices.length && i < 2; i++) { // Limitar a 2 intentos máximo
+        const device = vehicleDevices[i];
+        console.log(`🔗 Intentando conectar a: ${device.name} (${i + 1}/${Math.min(vehicleDevices.length, 2)})`);
+        
+        const connected = await this.connectToDevice(device);
+        
+        if (connected) {
+          console.log(`✅ Conectado exitosamente a: ${device.name}`);
+          return true;
+        } else {
+          console.log(`❌ Falló conexión a: ${device.name}`);
+          
+          // Pequeña pausa entre intentos
+          if (i < vehicleDevices.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        }
+      }
+      
+      console.log('❌ No se pudo conectar a ningún dispositivo');
+      return false;
       
     } catch (error) {
-      console.error('Auto-connection failed:', error);
+      console.error('❌ Auto-connection failed:', error);
       return false;
     }
+  }
+
+  /**
+   * Configurar Arduino específico por MAC address para conexión directa
+   */
+  setArduinoMAC(macAddress: string): void {
+    this.dynamicArduinoMAC = macAddress;
+    console.log(`📝 Arduino MAC configurado: ${macAddress}`);
+  }
+
+  /**
+   * Limpiar configuración de Arduino específico
+   */
+  clearArduinoMAC(): void {
+    this.dynamicArduinoMAC = null;
+    console.log('🗑️ Configuración de Arduino MAC limpiada');
+  }
+
+  /**
+   * Obtener MAC del Arduino configurado
+   */
+  getArduinoMAC(): string | null {
+    return this.dynamicArduinoMAC || this.ARDUINO_MAC_ADDRESS;
   }
 
   /**
    * Filtrar dispositivos para encontrar solo los del vehículo
    */
   filterVehicleDevices(devices: Device[]): Device[] {
-    return devices.filter(device => {
+    const filteredDevices = devices.filter(device => {
+      // Verificar que tenga nombre
       if (!device.name) return false;
       
-      return this.VEHICLE_DEVICE_PATTERNS.some(pattern => 
+      // Filtrar por patrones de nombre más estrictos
+      const matchesPattern = this.VEHICLE_DEVICE_PATTERNS.some(pattern => 
         device.name!.toLowerCase().includes(pattern.toLowerCase())
       );
-    }).sort((a, b) => (b.rssi || -100) - (a.rssi || -100)); // Ordenar por señal más fuerte
+      
+      // Verificar que tenga señal mínima decente (evitar dispositivos muy lejanos)
+      const hasDecentSignal = (device.rssi || -100) > -80;
+      
+      console.log(`🔍 Evaluando: ${device.name} (${device.id}) RSSI: ${device.rssi} - Match: ${matchesPattern && hasDecentSignal}`);
+      
+      return matchesPattern && hasDecentSignal;
+    });
+    
+    // Ordenar por señal más fuerte
+    return filteredDevices.sort((a, b) => (b.rssi || -100) - (a.rssi || -100));
   }
 
   /**

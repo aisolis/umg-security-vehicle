@@ -113,6 +113,12 @@ export default function MainScreen() {
           `Conectado a ${device?.name || 'dispositivo'}`,
           3000
         );
+        
+        // Configurar este dispositivo como Arduino principal para futuras conexiones directas
+        if (device?.id) {
+          BluetoothService.setArduinoMAC(device.id);
+          console.log(`📝 Arduino ${device.id} configurado para conexiones directas futuras`);
+        }
       } else {
         console.log('❌ No se pudo conectar al Arduino');
         setIsConnected(false);

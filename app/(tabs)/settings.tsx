@@ -18,10 +18,13 @@ import {
   Eye, 
   Shield, 
   User,
-  LogOut
+  LogOut,
+  Bluetooth,
+  Trash2
 } from 'lucide-react-native';
 import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
+import { BluetoothService } from '@/services/BluetoothService';
 import * as SecureStore from 'expo-secure-store';
 import { Toast } from '@/components/common/Toast';
 import { useToast } from '@/hooks/useToast';
@@ -38,11 +41,13 @@ export default function SettingsScreen() {
     preferredMethod: null,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [arduinoMAC, setArduinoMAC] = useState<string | null>(null);
   const { toast, showSuccess, showError, showWarning, showInfo, hideToast } = useToast();
 
   useEffect(() => {
     loadUserInfo();
     loadBiometricSettings();
+    loadArduinoConfiguration();
   }, []);
 
   const loadUserInfo = () => {
@@ -59,6 +64,34 @@ export default function SettingsScreen() {
     } catch (error) {
       console.log('No biometric settings found:', error);
     }
+  };
+
+  const loadArduinoConfiguration = () => {
+    const configuredMAC = BluetoothService.getArduinoMAC();
+    setArduinoMAC(configuredMAC);
+  };
+
+  const handleClearArduinoConfiguration = () => {
+    Alert.alert(
+      'Limpiar Configuración Arduino',
+      '¿Está seguro que desea limpiar la configuración del Arduino? La próxima conexión escaneará todos los dispositivos nuevamente.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Limpiar',
+          style: 'destructive',
+          onPress: () => {
+            BluetoothService.clearArduinoMAC();
+            setArduinoMAC(null);
+            showSuccess(
+              'Configuración Limpiada',
+              'La configuración del Arduino ha sido eliminada.',
+              3000
+            );
+          },
+        },
+      ]
+    );
   };
 
   const saveBiometricSettings = async (newSettings: BiometricSettings) => {
@@ -230,6 +263,41 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          {/* Arduino Configuration Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Bluetooth size={20} color={colors.neutral.white} />
+              <Text style={styles.sectionTitle}>Configuración Arduino</Text>
+            </View>
+            
+            <View style={styles.settingCard}>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Bluetooth size={20} color={arduinoMAC ? colors.success.main : colors.neutral.medium} />
+                  <View style={styles.settingText}>
+                    <Text style={styles.settingLabel}>Arduino Configurado</Text>
+                    <Text style={styles.settingDescription}>
+                      {arduinoMAC 
+                        ? `MAC: ${arduinoMAC.substring(0, 17)}...` 
+                        : 'No configurado - se escaneará automáticamente'
+                      }
+                    </Text>
+                  </View>
+                </View>
+              </View>
+              
+              {arduinoMAC && (
+                <TouchableOpacity 
+                  style={styles.clearArduinoButton}
+                  onPress={handleClearArduinoConfiguration}
+                >
+                  <Trash2 size={16} color={colors.error.main} />
+                  <Text style={styles.clearArduinoText}>Limpiar Configuración</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
           {/* App Info Section */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -383,5 +451,23 @@ const styles = StyleSheet.create({
     ...typography.body.medium,
     color: colors.error.main,
     marginLeft: spacing.small,
+  },
+  clearArduinoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.medium,
+    paddingVertical: spacing.small,
+    paddingHorizontal: spacing.medium,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: colors.error.main + '40',
+  },
+  clearArduinoText: {
+    ...typography.caption.medium,
+    color: colors.error.main,
+    marginLeft: spacing.small,
+    fontWeight: '500',
   },
 });
