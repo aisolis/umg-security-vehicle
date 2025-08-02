@@ -262,7 +262,37 @@ class BluetoothServiceClass {
    * Verificar estado de conexión
    */
   isDeviceConnected(): boolean {
-    return this.isConnected;
+    return this.isConnected && this.connectedDevice !== null;
+  }
+
+  /**
+   * Verificar estado de conexión de forma asíncrona (más precisa)
+   */
+  async isDeviceConnectedAsync(): Promise<boolean> {
+    if (!this.isConnected || !this.connectedDevice) {
+      return false;
+    }
+
+    try {
+      const deviceConnected = await this.connectedDevice.isConnected();
+      
+      // Si el dispositivo no está conectado a nivel BLE, actualizar el estado interno
+      if (!deviceConnected) {
+        console.log('🔍 Dispositivo no está realmente conectado - actualizando estado');
+        this.isConnected = false;
+        this.connectedDevice = null;
+        this.stopHeartbeat();
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.log('🔍 Error verificando conexión - asumiendo desconectado');
+      this.isConnected = false;
+      this.connectedDevice = null;
+      this.stopHeartbeat();
+      return false;
+    }
   }
 
   /**
@@ -300,11 +330,22 @@ class BluetoothServiceClass {
     this.heartbeatInterval = setInterval(async () => {
       if (this.isConnected && this.connectedDevice) {
         try {
+          // Verificar primero si el dispositivo sigue conectado a nivel de BLE
+          const deviceIsConnected = await this.connectedDevice.isConnected();
+          
+          if (!deviceIsConnected) {
+            console.log('❌ Dispositivo desconectado detectado en heartbeat');
+            this.isConnected = false;
+            this.connectedDevice = null;
+            this.stopHeartbeat();
+            return;
+          }
+          
           // Enviar comando STATUS como heartbeat
           await this.sendCommand('status');
-          console.log('💓 Heartbeat enviado');
+          console.log('💓 Heartbeat enviado - conexión OK');
         } catch (error) {
-          console.log('❌ Heartbeat falló - conexión perdida');
+          console.log('❌ Heartbeat falló - conexión perdida:', error);
           this.isConnected = false;
           this.connectedDevice = null;
           this.stopHeartbeat();

@@ -36,6 +36,15 @@ export default function MainScreen() {
 
     initializeBluetoothConnection();
 
+    // Verificar estado de conexión cada 5 segundos
+    const connectionCheckInterval = setInterval(async () => {
+      const actualConnectionState = await BluetoothService.isDeviceConnectedAsync();
+      if (actualConnectionState !== isConnected) {
+        console.log(`🔄 Actualizando estado de conexión UI: ${actualConnectionState}`);
+        setIsConnected(actualConnectionState);
+      }
+    }, 5000);
+
     // Manejar cambios de estado de la app
     const handleAppStateChange = (nextAppState: string) => {
       console.log('App state changed to:', nextAppState);
@@ -58,11 +67,12 @@ export default function MainScreen() {
 
     // Cleanup al desmontar
     return () => {
+      clearInterval(connectionCheckInterval);
       subscription?.remove();
       console.log('Component unmounting, disconnecting...');
       BluetoothService.disconnect();
     };
-  }, []);
+  }, [isConnected]);
 
   const initializeBluetoothConnection = async () => {
     try {
@@ -118,10 +128,13 @@ export default function MainScreen() {
   };
 
   const handleVehicleAction = async (action: 'lock' | 'unlock') => {
-    // Verificar si realmente está conectado al Arduino
-    const actuallyConnected = BluetoothService.isDeviceConnected();
+    // Verificar si realmente está conectado al Arduino (verificación precisa)
+    const actuallyConnected = await BluetoothService.isDeviceConnectedAsync();
     
     if (!actuallyConnected) {
+      // Actualizar UI inmediatamente si la conexión se perdió
+      setIsConnected(false);
+      
       Alert.alert(
         'Sin Conexión', 
         'No hay conexión con el Arduino. ¿Desea intentar reconectar?',
