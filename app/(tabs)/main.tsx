@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.large,
+    gap: spacing.medium,
   },
   actionButton: {
     width: width * 0.6,
@@ -337,12 +337,12 @@ const styles = StyleSheet.create({
     padding: spacing.medium,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 8,
-    marginBottom: spacing.large,
+    marginBottom: spacing.small
   },
   emergencyText: {
     ...typography.caption.small,
     color: colors.neutral.medium,
     marginLeft: spacing.small,
-    textAlign: 'center',
+    textAlign: 'center'
   },
 });

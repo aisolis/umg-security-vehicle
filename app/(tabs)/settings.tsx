@@ -26,7 +26,7 @@ import * as SecureStore from 'expo-secure-store';
 
 interface BiometricSettings {
   enabled: boolean;
-  preferredMethod: 'fingerprint' | 'face' | 'pin' | null;
+  preferredMethod: 'fingerprint' | null;
 }
 
 export default function SettingsScreen() {
@@ -69,29 +69,26 @@ export default function SettingsScreen() {
 
   const toggleBiometrics = async (enabled: boolean) => {
     if (enabled) {
-      // Si está activando biométricos, mostrar opciones
-      Alert.alert(
-        'Configurar Autenticación Biométrica',
-        'Seleccione el método preferido:',
-        [
-          {
-            text: 'Huella Digital',
-            onPress: () => setupBiometric('fingerprint'),
-          },
-          {
-            text: 'Face ID',
-            onPress: () => setupBiometric('face'),
-          },
-          {
-            text: 'PIN',
-            onPress: () => setupBiometric('pin'),
-          },
-          {
-            text: 'Cancelar',
-            style: 'cancel',
-          },
-        ]
-      );
+      // Detectar métodos disponibles y mostrar solo esos
+      const capabilities = await AuthService.getBiometricCapabilities();
+      
+      if (!capabilities.hasHardware || !capabilities.isEnrolled) {
+        Alert.alert(
+          'No Disponible',
+          'Este dispositivo no tiene autenticación biométrica configurada. Configure Face ID, Touch ID o huella digital en las opciones del sistema primero.'
+        );
+        return;
+      }
+
+      // Solo verificar huella digital
+      if (await AuthService.isBiometricTypeAvailable('fingerprint')) {
+        setupBiometric('fingerprint');
+      } else {
+        Alert.alert(
+          'No Disponible',
+          'La huella digital no está disponible en este dispositivo. Configure Touch ID o huella digital en las opciones del sistema primero.'
+        );
+      }
     } else {
       // Desactivar biométricos
       await AuthService.disableBiometricAuthentication();
@@ -103,22 +100,16 @@ export default function SettingsScreen() {
     }
   };
 
-  const setupBiometric = async (method: 'fingerprint' | 'face' | 'pin') => {
+  const setupBiometric = async (method: 'fingerprint') => {
     setIsLoading(true);
     try {
       // Verificar disponibilidad del método
       const isAvailable = await AuthService.isBiometricTypeAvailable(method);
       
       if (!isAvailable) {
-        const methodNames = {
-          fingerprint: 'Huella Digital',
-          face: 'Face ID',
-          pin: 'PIN',
-        };
-        
         Alert.alert(
           'No Disponible',
-          `${methodNames[method]} no está disponible en este dispositivo. Verifique que esté configurado en las opciones del sistema.`
+          'La huella digital no está disponible en este dispositivo. Verifique que esté configurado en las opciones del sistema.'
         );
         return;
       }
@@ -133,15 +124,9 @@ export default function SettingsScreen() {
           preferredMethod: method,
         });
 
-        const methodNames = {
-          fingerprint: 'Huella Digital',
-          face: 'Face ID',
-          pin: 'PIN',
-        };
-
         Alert.alert(
           'Configuración Exitosa', 
-          `${methodNames[method]} configurado correctamente. Ahora podrá usarlo para iniciar sesión.`
+          'Huella digital configurada correctamente. Ahora podrá usarla para iniciar sesión.'
         );
       }
     } catch (error: any) {
@@ -171,16 +156,10 @@ export default function SettingsScreen() {
   };
 
   const getBiometricIcon = () => {
-    switch (biometricSettings.preferredMethod) {
-      case 'fingerprint':
-        return <Fingerprint size={20} color={colors.success.main} />;
-      case 'face':
-        return <Eye size={20} color={colors.success.main} />;
-      case 'pin':
-        return <Smartphone size={20} color={colors.success.main} />;
-      default:
-        return <Shield size={20} color={colors.neutral.medium} />;
+    if (biometricSettings.preferredMethod === 'fingerprint') {
+      return <Fingerprint size={20} color={colors.success.main} />;
     }
+    return <Shield size={20} color={colors.neutral.medium} />;
   };
 
   return (
@@ -222,8 +201,7 @@ export default function SettingsScreen() {
                     <Text style={styles.settingLabel}>Autenticación Biométrica</Text>
                     <Text style={styles.settingDescription}>
                       {biometricSettings.enabled 
-                        ? `Configurado: ${biometricSettings.preferredMethod === 'fingerprint' ? 'Huella Digital' : 
-                                        biometricSettings.preferredMethod === 'face' ? 'Face ID' : 'PIN'}`
+                        ? 'Configurado: Huella Digital'
                         : 'Desactivada'
                       }
                     </Text>
@@ -238,14 +216,6 @@ export default function SettingsScreen() {
                 />
               </View>
               
-              {biometricSettings.enabled && (
-                <TouchableOpacity 
-                  style={styles.changeMethodButton}
-                  onPress={() => toggleBiometrics(true)}
-                >
-                  <Text style={styles.changeMethodText}>Cambiar Método</Text>
-                </TouchableOpacity>
-              )}
             </View>
           </View>
 

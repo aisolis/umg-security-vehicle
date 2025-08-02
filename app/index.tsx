@@ -29,7 +29,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [activeBiometricMethod, setActiveBiometricMethod] = useState<'fingerprint' | 'face' | 'pin' | null>(null);
+  const [activeBiometricMethod, setActiveBiometricMethod] = useState<'fingerprint' | null>(null);
   const [showTraditionalLogin, setShowTraditionalLogin] = useState(true);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function LoginScreen() {
     }
   };
 
-  const handleBiometricLogin = async (method: 'fingerprint' | 'face' | 'pin') => {
+  const handleBiometricLogin = async (method: 'fingerprint') => {
     try {
       setIsLoading(true);
       console.log(`🔐 Autenticación biométrica: ${method}`);
@@ -65,7 +65,7 @@ export default function LoginScreen() {
       if (!isAvailable) {
         Alert.alert(
           'No Disponible',
-          `${method === 'fingerprint' ? 'Huella digital' : method === 'face' ? 'Face ID' : 'PIN'} no está disponible en este dispositivo.`
+          'La huella digital no está disponible en este dispositivo.'
         );
         return;
       }
@@ -136,30 +136,12 @@ export default function LoginScreen() {
     setShowTraditionalLogin(!showTraditionalLogin);
   };
 
-  const getBiometricIcon = (method: 'fingerprint' | 'face' | 'pin', size: number = 48) => {
-    switch (method) {
-      case 'fingerprint':
-        return <Fingerprint size={size} color={colors.accent.main} strokeWidth={2} />;
-      case 'face':
-        return <Eye size={size} color={colors.accent.main} strokeWidth={2} />;
-      case 'pin':
-        return <Smartphone size={size} color={colors.accent.main} strokeWidth={2} />;
-      default:
-        return <Lock size={size} color={colors.accent.main} strokeWidth={2} />;
-    }
+  const getBiometricIcon = (method: 'fingerprint', size: number = 48) => {
+    return <Fingerprint size={size} color={colors.accent.main} strokeWidth={2} />;
   };
 
-  const getBiometricMethodName = (method: 'fingerprint' | 'face' | 'pin') => {
-    switch (method) {
-      case 'fingerprint':
-        return 'Huella Digital';
-      case 'face':
-        return 'Face ID';
-      case 'pin':
-        return 'PIN';
-      default:
-        return 'Biométrico';
-    }
+  const getBiometricMethodName = (method: 'fingerprint') => {
+    return 'Huella Digital';
   };
 
   const isFormValid = credentials.email.includes('@') && credentials.password.length >= 6;

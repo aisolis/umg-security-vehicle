@@ -4,6 +4,7 @@
 
 import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { Platform } from 'react-native';
 
 interface User {
   id: string;
@@ -35,7 +36,7 @@ interface ApiError {
 
 interface BiometricSettings {
   enabled: boolean;
-  preferredMethod: 'fingerprint' | 'face' | 'pin' | null;
+  preferredMethod: 'fingerprint' | null;
 }
 
 interface BiometricCapabilities {
@@ -256,6 +257,21 @@ class AuthServiceClass {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       const supportedTypes = await LocalAuthentication.supportedAuthenticationTypesAsync();
 
+      // Debug: mostrar qué tipos están disponibles
+      console.log('🔍 Biometric capabilities:', {
+        hasHardware,
+        isEnrolled,
+        supportedTypes: supportedTypes.map(type => {
+          switch(type) {
+            case LocalAuthentication.AuthenticationType.FINGERPRINT: return 'FINGERPRINT';
+            case LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION: return 'FACIAL_RECOGNITION';
+            case LocalAuthentication.AuthenticationType.IRIS: return 'IRIS';
+            case LocalAuthentication.AuthenticationType.PASSCODE: return 'PASSCODE';
+            default: return `UNKNOWN(${type})`;
+          }
+        })
+      });
+
       return {
         hasHardware,
         isEnrolled,
@@ -274,7 +290,7 @@ class AuthServiceClass {
   /**
    * Verificar si un tipo de autenticación específico está disponible
    */
-  async isBiometricTypeAvailable(type: 'fingerprint' | 'face' | 'pin'): Promise<boolean> {
+  async isBiometricTypeAvailable(type: 'fingerprint'): Promise<boolean> {
     try {
       const capabilities = await this.getBiometricCapabilities();
       
@@ -282,13 +298,10 @@ class AuthServiceClass {
         return false;
       }
 
-      const typeMap = {
-        fingerprint: LocalAuthentication.AuthenticationType.FINGERPRINT,
-        face: LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
-        pin: LocalAuthentication.AuthenticationType.PASSCODE,
-      };
-
-      return capabilities.supportedTypes.includes(typeMap[type]);
+      const supportedTypes = capabilities.supportedTypes;
+      
+      // Solo soportar huella digital
+      return supportedTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT);
     } catch (error) {
       console.error('Error checking biometric type availability:', error);
       return false;
@@ -296,9 +309,29 @@ class AuthServiceClass {
   }
 
   /**
+   * Obtener el método biométrico principal del dispositivo
+   */
+  async getPrimaryBiometricMethod(): Promise<'fingerprint' | null> {
+    try {
+      const capabilities = await this.getBiometricCapabilities();
+      const supportedTypes = capabilities.supportedTypes;
+      
+      // Solo soportar huella digital
+      if (supportedTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+        return 'fingerprint';
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error getting primary biometric method:', error);
+      return null;
+    }
+  }
+
+  /**
    * Configurar autenticación biométrica
    */
-  async setupBiometricAuthentication(method: 'fingerprint' | 'face' | 'pin'): Promise<boolean> {
+  async setupBiometricAuthentication(method: 'fingerprint'): Promise<boolean> {
     try {
       // Verificar capacidades del dispositivo
       const isAvailable = await this.isBiometricTypeAvailable(method);
@@ -332,7 +365,7 @@ class AuthServiceClass {
   /**
    * Autenticar con biométricos
    */
-  async authenticateWithBiometrics(method?: 'fingerprint' | 'face' | 'pin'): Promise<{success: boolean; error?: string}> {
+  async authenticateWithBiometrics(method?: 'fingerprint'): Promise<{success: boolean; error?: string}> {
     try {
       // Obtener configuración guardada si no se especifica método
       let authMethod = method;
@@ -350,26 +383,23 @@ class AuthServiceClass {
         return { success: false, error: `${authMethod} no está disponible` };
       }
 
-      // Configurar prompt según el método
-      const promptMessage = {
-        fingerprint: 'Coloque su dedo en el sensor',
-        face: 'Mire a la cámara',
-        pin: 'Ingrese su PIN',
+      // Configurar prompt para huella digital únicamente
+      const promptMessage = 'Coloque su dedo en el sensor de huella digital';
+
+      // Configurar opciones de autenticación
+      const authOptions: LocalAuthentication.LocalAuthenticationOptions = {
+        promptMessage,
+        fallbackLabel: 'Usar contraseña del dispositivo',
+        cancelLabel: 'Cancelar',
+        disableDeviceFallback: false,
       };
 
-      const fallbackLabel = {
-        fingerprint: 'Usar contraseña',
-        face: 'Usar contraseña', 
-        pin: 'Usar contraseña',
-      };
+      console.log('🔐 Configurando para autenticación por huella digital');
+
+      console.log(`🔐 Ejecutando autenticación ${authMethod} con prompt: "${promptMessage}"`);
 
       // Ejecutar autenticación
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: promptMessage[authMethod],
-        fallbackLabel: fallbackLabel[authMethod],
-        disableDeviceFallback: false,
-        cancelLabel: 'Cancelar',
-      });
+      const result = await LocalAuthentication.authenticateAsync(authOptions);
 
       if (result.success) {
         console.log(`✅ Biometric authentication successful: ${authMethod}`);
@@ -491,7 +521,7 @@ class AuthServiceClass {
   /**
    * Obtener método biométrico activo
    */
-  async getActiveBiometricMethod(): Promise<'fingerprint' | 'face' | 'pin' | null> {
+  async getActiveBiometricMethod(): Promise<'fingerprint' | null> {
     try {
       const settings = await this.getBiometricSettings();
       if (settings.enabled && settings.preferredMethod) {
