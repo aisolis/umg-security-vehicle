@@ -240,9 +240,6 @@ export default function MainScreen() {
               <Text style={styles.welcomeText}>Bienvenido</Text>
               <Text style={styles.usernameText}>{userInfo?.name || 'Usuario'}</Text>
             </View>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-              <LogOut size={24} color={colors.neutral.white} />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -329,6 +326,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.large,
     paddingBottom: spacing.medium,
+    paddingTop: spacing.small,
   },
   headerContent: {
     flexDirection: 'row',
