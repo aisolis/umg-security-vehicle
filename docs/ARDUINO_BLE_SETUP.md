@@ -34,6 +34,12 @@ const int LED_PIN = 13;
 const int LOCK_PIN = 2;
 const int UNLOCK_PIN = 3;
 
+// Variables para manejo de conexión
+unsigned long lastCommandTime = 0;
+const unsigned long CONNECTION_TIMEOUT = 30000; // 30 segundos sin comandos = desconexión
+const unsigned long HEARTBEAT_INTERVAL = 10000; // Verificar conexión cada 10 segundos
+unsigned long lastHeartbeat = 0;
+
 void setup() {
   Serial.begin(9600);
   while (!Serial);
@@ -79,8 +85,12 @@ void loop() {
     Serial.print("Conectado a: ");
     Serial.println(central.address());
     digitalWrite(LED_PIN, LOW); // Indicar conexión
+    lastCommandTime = millis(); // Resetear timeout
+    lastHeartbeat = millis();
 
     while (central.connected()) {
+      unsigned long currentTime = millis();
+      
       // Verificar si hay comandos recibidos
       if (rxCharacteristic.written()) {
         String command = "";
@@ -97,14 +107,43 @@ void loop() {
         Serial.print("Comando recibido: ");
         Serial.println(command);
 
+        // Actualizar tiempo del último comando
+        lastCommandTime = currentTime;
+        
         // Procesar comando
         processCommand(command);
       }
+      
+      // Verificar timeout de conexión (si no hay comandos por mucho tiempo)
+      if (currentTime - lastCommandTime > CONNECTION_TIMEOUT) {
+        Serial.println("⏰ Timeout de conexión - forzando desconexión");
+        central.disconnect();
+        break;
+      }
+      
+      // Heartbeat periódico para verificar conexión
+      if (currentTime - lastHeartbeat > HEARTBEAT_INTERVAL) {
+        Serial.println("💓 Heartbeat - conexión activa");
+        lastHeartbeat = currentTime;
+        
+        // Opcional: enviar ping para mantener conexión activa
+        // txCharacteristic.writeValue("PING");
+      }
+      
+      // Pequeño delay para no saturar el procesador
+      delay(100);
     }
 
     Serial.print("Desconectado de: ");
     Serial.println(central.address());
     digitalWrite(LED_PIN, HIGH); // Indicar desconexión
+    
+    // Reset de variables
+    lastCommandTime = 0;
+    lastHeartbeat = 0;
+    
+    // Pequeño delay antes de aceptar nuevas conexiones
+    delay(1000);
   }
 }
 

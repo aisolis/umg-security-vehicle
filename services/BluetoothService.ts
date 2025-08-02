@@ -19,6 +19,7 @@ class BluetoothServiceClass {
   private isConnected: boolean = false;
   private connectedDevice: Device | null = null;
   private scanSubscription: any = null;
+  private heartbeatInterval: any = null;
 
   // Función helper para convertir string a base64
   private stringToBase64(str: string): string {
@@ -58,6 +59,7 @@ class BluetoothServiceClass {
   
   private readonly CONNECTION_TIMEOUT = 10000; // 10 segundos
   private readonly SCAN_TIMEOUT = 10000; // 10 segundos para escaneo
+  private readonly HEARTBEAT_INTERVAL = 15000; // 15 segundos
 
   constructor() {
     this.manager = new BleManager();
@@ -134,8 +136,22 @@ class BluetoothServiceClass {
     try {
       console.log(`Conectando a: ${device.name} (${device.id})`);
       
-      // Conectar al dispositivo
-      const connectedDevice = await device.connect();
+      // Verificar si ya está conectado a este dispositivo
+      if (this.connectedDevice && this.connectedDevice.id === device.id && this.isConnected) {
+        console.log('Ya conectado a este dispositivo');
+        return true;
+      }
+
+      // Desconectar cualquier conexión previa
+      await this.disconnect();
+      
+      // Conectar al dispositivo con timeout
+      const connectedDevice = await Promise.race([
+        device.connect(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Connection timeout')), this.CONNECTION_TIMEOUT)
+        )
+      ]) as Device;
       
       // Descubrir servicios y características
       const deviceWithServices = await connectedDevice.discoverAllServicesAndCharacteristics();
@@ -146,11 +162,15 @@ class BluetoothServiceClass {
       console.log('Conexión establecida exitosamente');
       
       // Configurar listener para desconexión
-      device.onDisconnected(() => {
-        console.log('Dispositivo desconectado');
+      deviceWithServices.onDisconnected((error, disconnectedDevice) => {
+        console.log('Dispositivo desconectado:', disconnectedDevice?.name, error ? `Error: ${error.message}` : '');
         this.isConnected = false;
         this.connectedDevice = null;
+        this.stopHeartbeat();
       });
+      
+      // Iniciar heartbeat para mantener conexión viva
+      this.startHeartbeat();
       
       return true;
     } catch (error) {
@@ -272,10 +292,45 @@ class BluetoothServiceClass {
   }
 
   /**
+   * Iniciar heartbeat para mantener conexión activa
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat(); // Asegurar que no hay heartbeat previo
+    
+    this.heartbeatInterval = setInterval(async () => {
+      if (this.isConnected && this.connectedDevice) {
+        try {
+          // Enviar comando STATUS como heartbeat
+          await this.sendCommand('status');
+          console.log('💓 Heartbeat enviado');
+        } catch (error) {
+          console.log('❌ Heartbeat falló - conexión perdida');
+          this.isConnected = false;
+          this.connectedDevice = null;
+          this.stopHeartbeat();
+        }
+      }
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  /**
+   * Detener heartbeat
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      console.log('💓 Heartbeat detenido');
+    }
+  }
+
+  /**
    * Desconectar del dispositivo
    */
   async disconnect(): Promise<void> {
     try {
+      this.stopHeartbeat();
+      
       if (this.connectedDevice) {
         await this.connectedDevice.cancelConnection();
       }

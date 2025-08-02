@@ -7,6 +7,7 @@ import {
   Dimensions,
   Alert,
   Platform,
+  AppState,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -34,6 +35,33 @@ export default function MainScreen() {
     setUserInfo(user);
 
     initializeBluetoothConnection();
+
+    // Manejar cambios de estado de la app
+    const handleAppStateChange = (nextAppState: string) => {
+      console.log('App state changed to:', nextAppState);
+      
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        // App va al background - desconectar limpiamente
+        console.log('App going to background, disconnecting...');
+        BluetoothService.disconnect();
+        setIsConnected(false);
+      } else if (nextAppState === 'active' && !BluetoothService.isDeviceConnected()) {
+        // App vuelve al foreground - reconectar
+        console.log('App returning to foreground, reconnecting...');
+        setTimeout(() => {
+          initializeBluetoothConnection();
+        }, 1000); // Pequeño delay para asegurar limpieza
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Cleanup al desmontar
+    return () => {
+      subscription?.remove();
+      console.log('Component unmounting, disconnecting...');
+      BluetoothService.disconnect();
+    };
   }, []);
 
   const initializeBluetoothConnection = async () => {
