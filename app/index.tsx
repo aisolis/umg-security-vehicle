@@ -29,6 +29,8 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [activeBiometricMethod, setActiveBiometricMethod] = useState<'fingerprint' | 'face' | 'pin' | null>(null);
+  const [showTraditionalLogin, setShowTraditionalLogin] = useState(true);
 
   useEffect(() => {
     checkBiometricAvailability();
@@ -36,8 +38,18 @@ export default function LoginScreen() {
 
   const checkBiometricAvailability = async () => {
     try {
-      const settings = await AuthService.getBiometricSettings();
-      setBiometricAvailable(settings.enabled);
+      const canUseBiometric = await AuthService.canUseBiometricLogin();
+      const activeMethod = await AuthService.getActiveBiometricMethod();
+      
+      setBiometricAvailable(canUseBiometric);
+      setActiveBiometricMethod(activeMethod);
+      
+      // Si hay biométrico disponible, mostrar primero la opción biométrica
+      if (canUseBiometric && activeMethod) {
+        setShowTraditionalLogin(false);
+      }
+      
+      console.log('🔐 Biometric status:', { canUseBiometric, activeMethod });
     } catch (error) {
       console.log('No biometric settings found:', error);
     }
@@ -58,28 +70,12 @@ export default function LoginScreen() {
         return;
       }
 
-      // Ejecutar autenticación biométrica
-      const result = await AuthService.authenticateWithBiometrics(method);
+      // Usar login biométrico directo (estilo app bancaria)
+      const success = await AuthService.loginWithBiometrics();
       
-      if (result.success) {
-        // Cargar sesión existente si la autenticación fue exitosa
-        const hasSession = await AuthService.loginWithBiometrics();
-        
-        if (hasSession) {
-          console.log('✅ Biometric login successful, navegando a main');
-          router.replace('/(tabs)/main');
-        } else {
-          Alert.alert(
-            'Sesión No Encontrada',
-            'No hay una sesión previa guardada. Por favor inicie sesión con email y contraseña primero.'
-          );
-        }
-      } else {
-        // Autenticación biométrica falló
-        Alert.alert(
-          'Autenticación Fallida',
-          result.error || 'No se pudo verificar la identidad biométrica'
-        );
+      if (success) {
+        console.log('✅ Biometric login successful, navegando a main');
+        router.replace('/(tabs)/main');
       }
     } catch (error: any) {
       console.error('❌ Error en biometric login:', error);
@@ -136,6 +132,36 @@ export default function LoginScreen() {
     }
   };
 
+  const toggleLoginMethod = () => {
+    setShowTraditionalLogin(!showTraditionalLogin);
+  };
+
+  const getBiometricIcon = (method: 'fingerprint' | 'face' | 'pin', size: number = 48) => {
+    switch (method) {
+      case 'fingerprint':
+        return <Fingerprint size={size} color={colors.accent.main} strokeWidth={2} />;
+      case 'face':
+        return <Eye size={size} color={colors.accent.main} strokeWidth={2} />;
+      case 'pin':
+        return <Smartphone size={size} color={colors.accent.main} strokeWidth={2} />;
+      default:
+        return <Lock size={size} color={colors.accent.main} strokeWidth={2} />;
+    }
+  };
+
+  const getBiometricMethodName = (method: 'fingerprint' | 'face' | 'pin') => {
+    switch (method) {
+      case 'fingerprint':
+        return 'Huella Digital';
+      case 'face':
+        return 'Face ID';
+      case 'pin':
+        return 'PIN';
+      default:
+        return 'Biométrico';
+    }
+  };
+
   const isFormValid = credentials.email.includes('@') && credentials.password.length >= 6;
 
   return (
@@ -152,14 +178,48 @@ export default function LoginScreen() {
             {/* Logo/Header Section */}
             <View style={styles.header}>
               <View style={styles.logoContainer}>
-                <Lock size={48} color={colors.accent.main} strokeWidth={2} />
+                {biometricAvailable && activeBiometricMethod && !showTraditionalLogin 
+                  ? getBiometricIcon(activeBiometricMethod, 48)
+                  : <Lock size={48} color={colors.accent.main} strokeWidth={2} />
+                }
               </View>
               <Text style={styles.title}>VehicleGuard</Text>
               <Text style={styles.subtitle}>Control Vehicular Seguro</Text>
             </View>
 
-            {/* Form Section */}
-            <View style={styles.form}>
+            {/* Biometric Section - Prominente */}
+            {biometricAvailable && activeBiometricMethod && !showTraditionalLogin && (
+              <View style={styles.biometricMainSection}>
+                <Text style={styles.biometricWelcomeText}>
+                  Bienvenido de vuelta
+                </Text>
+                <Text style={styles.biometricSubtext}>
+                  Use su {getBiometricMethodName(activeBiometricMethod)} para acceder
+                </Text>
+                
+                <TouchableOpacity
+                  style={styles.biometricMainButton}
+                  onPress={() => handleBiometricLogin(activeBiometricMethod)}
+                  disabled={isLoading}
+                >
+                  {getBiometricIcon(activeBiometricMethod, 64)}
+                  <Text style={styles.biometricMainButtonText}>
+                    {isLoading ? 'Autenticando...' : `Usar ${getBiometricMethodName(activeBiometricMethod)}`}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.usePasswordButton}
+                  onPress={toggleLoginMethod}
+                >
+                  <Text style={styles.usePasswordText}>Usar contraseña</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Form Section - Solo se muestra si no hay biométrico o si se eligió usar contraseña */}
+            {(showTraditionalLogin || !biometricAvailable) && (
+              <View style={styles.form}>
               {/* Email Input */}
               <View style={styles.inputContainer}>
                 <View style={styles.inputIcon}>
@@ -237,46 +297,20 @@ export default function LoginScreen() {
                 </Text>
               </TouchableOpacity>
 
-              {/* Biometric Options */}
-              {biometricAvailable && (
-                <View style={styles.biometricSection}>
-                  <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>o continuar con</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-                  
-                  <View style={styles.biometricButtons}>
-                    <TouchableOpacity
-                      style={styles.biometricButton}
-                      onPress={() => handleBiometricLogin('fingerprint')}
-                      disabled={isLoading}
-                    >
-                      <Fingerprint size={28} color={colors.neutral.white} />
-                      <Text style={styles.biometricButtonText}>Huella</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={styles.biometricButton}
-                      onPress={() => handleBiometricLogin('face')}
-                      disabled={isLoading}
-                    >
-                      <Eye size={28} color={colors.neutral.white} />
-                      <Text style={styles.biometricButtonText}>Face ID</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={styles.biometricButton}
-                      onPress={() => handleBiometricLogin('pin')}
-                      disabled={isLoading}
-                    >
-                      <Smartphone size={28} color={colors.neutral.white} />
-                      <Text style={styles.biometricButtonText}>PIN</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+              {/* Volver a biométrico si está disponible */}
+              {biometricAvailable && activeBiometricMethod && (
+                <TouchableOpacity
+                  style={styles.backToBiometricButton}
+                  onPress={toggleLoginMethod}
+                >
+                  {getBiometricIcon(activeBiometricMethod, 20)}
+                  <Text style={styles.backToBiometricText}>
+                    Usar {getBiometricMethodName(activeBiometricMethod)}
+                  </Text>
+                </TouchableOpacity>
               )}
-            </View>
+              </View>
+            )}
 
             {/* Footer */}
             <View style={styles.footer}>
@@ -393,6 +427,66 @@ const styles = StyleSheet.create({
   loginButtonText: {
     ...typography.button.large,
     color: colors.neutral.white,
+  },
+  biometricMainSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xlarge,
+    paddingHorizontal: spacing.large,
+  },
+  biometricWelcomeText: {
+    ...typography.heading.medium,
+    color: colors.neutral.white,
+    textAlign: 'center',
+    marginBottom: spacing.small,
+  },
+  biometricSubtext: {
+    ...typography.body.medium,
+    color: colors.neutral.light,
+    textAlign: 'center',
+    marginBottom: spacing.xlarge,
+  },
+  biometricMainButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: spacing.xlarge,
+    paddingHorizontal: spacing.xlarge,
+    borderRadius: 20,
+    alignItems: 'center',
+    marginBottom: spacing.large,
+    minWidth: 200,
+    borderWidth: 2,
+    borderColor: colors.accent.main,
+  },
+  biometricMainButtonText: {
+    ...typography.body.large,
+    color: colors.neutral.white,
+    marginTop: spacing.medium,
+    textAlign: 'center',
+  },
+  usePasswordButton: {
+    paddingVertical: spacing.medium,
+    paddingHorizontal: spacing.large,
+  },
+  usePasswordText: {
+    ...typography.body.medium,
+    color: colors.accent.main,
+    textAlign: 'center',
+  },
+  backToBiometricButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingVertical: spacing.medium,
+    paddingHorizontal: spacing.large,
+    borderRadius: 12,
+    marginTop: spacing.large,
+    borderWidth: 1,
+    borderColor: colors.accent.main,
+  },
+  backToBiometricText: {
+    ...typography.body.medium,
+    color: colors.accent.main,
+    marginLeft: spacing.small,
   },
   biometricSection: {
     marginTop: spacing.xlarge,

@@ -114,6 +114,9 @@ class AuthServiceClass {
         // Guardar en almacenamiento seguro
         await this.saveSession(data.user, data.session);
         
+        // Guardar datos del usuario para biométricos futuros
+        await this.saveBiometricUserData(data.user);
+        
         return true;
       } else {
         console.log('❌ Login fallido:', data.error);
@@ -141,6 +144,18 @@ class AuthServiceClass {
       console.log('✅ Sesión guardada en almacenamiento seguro');
     } catch (error) {
       console.error('❌ Error guardando sesión:', error);
+    }
+  }
+
+  /**
+   * Guardar datos del usuario para uso con biométricos
+   */
+  private async saveBiometricUserData(user: User): Promise<void> {
+    try {
+      await SecureStore.setItemAsync('biometric_user_data', JSON.stringify(user));
+      console.log('✅ Datos de usuario guardados para biométricos');
+    } catch (error) {
+      console.error('❌ Error guardando datos biométricos de usuario:', error);
     }
   }
 
@@ -371,30 +386,57 @@ class AuthServiceClass {
   }
 
   /**
-   * Login con biométricos
+   * Login con biométricos (estilo app bancaria)
    */
   async loginWithBiometrics(): Promise<boolean> {
     try {
-      // Verificar que hay una sesión previa guardada
-      const hasStoredSession = await this.hasStoredSession();
-      if (!hasStoredSession) {
-        throw new Error('No hay sesión previa. Inicie sesión primero con email y contraseña.');
+      // Verificar que hay un usuario registrado para biométricos
+      const hasUserForBiometrics = await this.hasUserForBiometrics();
+      if (!hasUserForBiometrics) {
+        throw new Error('No hay usuario configurado para biométricos. Inicie sesión primero con email y contraseña.');
       }
 
       // Autenticar con biométricos
       const biometricResult = await this.authenticateWithBiometrics();
       
       if (biometricResult.success) {
-        // Cargar sesión guardada
-        await this.loadStoredSession();
-        console.log('✅ Biometric login successful');
-        return true;
+        // Cargar datos del usuario desde almacenamiento local
+        const userData = await SecureStore.getItemAsync('biometric_user_data');
+        if (userData) {
+          this.currentUser = JSON.parse(userData);
+          this.isAuthenticated = true;
+          
+          // Generar una nueva sesión local (sin llamar a la API)
+          this.currentSession = {
+            access_token: 'biometric_session_' + Date.now(),
+            refresh_token: 'biometric_refresh_' + Date.now(),
+            expires_at: Date.now() + (24 * 60 * 60 * 1000), // 24 horas
+          };
+          
+          console.log('✅ Biometric login successful');
+          return true;
+        }
       } else {
         throw new Error(biometricResult.error || 'Autenticación biométrica fallida');
       }
+      
+      return false;
     } catch (error) {
       console.error('❌ Biometric login failed:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Verificar si hay usuario configurado para biométricos
+   */
+  private async hasUserForBiometrics(): Promise<boolean> {
+    try {
+      const userData = await SecureStore.getItemAsync('biometric_user_data');
+      const settings = await this.getBiometricSettings();
+      return !!(userData && settings.enabled);
+    } catch (error) {
+      return false;
     }
   }
 
@@ -436,10 +478,44 @@ class AuthServiceClass {
    */
   async disableBiometricAuthentication(): Promise<void> {
     try {
-      await SecureStore.deleteItemAsync('biometric_settings');
+      await Promise.all([
+        SecureStore.deleteItemAsync('biometric_settings'),
+        SecureStore.deleteItemAsync('biometric_user_data'),
+      ]);
       console.log('✅ Biometric authentication disabled');
     } catch (error) {
       console.error('Error disabling biometric authentication:', error);
+    }
+  }
+
+  /**
+   * Obtener método biométrico activo
+   */
+  async getActiveBiometricMethod(): Promise<'fingerprint' | 'face' | 'pin' | null> {
+    try {
+      const settings = await this.getBiometricSettings();
+      if (settings.enabled && settings.preferredMethod) {
+        // Verificar que sigue disponible
+        const isAvailable = await this.isBiometricTypeAvailable(settings.preferredMethod);
+        return isAvailable ? settings.preferredMethod : null;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting active biometric method:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Verificar si el usuario puede usar login biométrico
+   */
+  async canUseBiometricLogin(): Promise<boolean> {
+    try {
+      const activeBiometric = await this.getActiveBiometricMethod();
+      const hasUserData = await this.hasUserForBiometrics();
+      return !!(activeBiometric && hasUserData);
+    } catch (error) {
+      return false;
     }
   }
 }
