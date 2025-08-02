@@ -1,7 +1,11 @@
 /**
- * BluetoothService - Servicio stub para comunicación Bluetooth
- * Preparado para integración con react-native-bluetooth-classic
+ * BluetoothService - Servicio para comunicación Bluetooth BLE
+ * Integrado con react-native-ble-plx
  */
+
+import { BleManager, Device, State } from 'react-native-ble-plx';
+import { PermissionsAndroid, Platform, Alert } from 'react-native';
+import { encode } from 'react-native-base64';
 
 type VehicleCommand = 'lock' | 'unlock' | 'status';
 type CommandResponse = {
@@ -11,37 +15,89 @@ type CommandResponse = {
 };
 
 class BluetoothServiceClass {
+  private manager: BleManager;
   private isInitialized: boolean = false;
   private isConnected: boolean = false;
-  private deviceAddress: string | null = null;
+  private connectedDevice: Device | null = null;
+  private scanSubscription: any = null;
   
-  // Configuración específica para Arduino
+  // Configuración específica para dispositivos BLE del vehículo
   private readonly VEHICLE_DEVICE_PATTERNS = [
-    'VehicleControl',     // Nombre personalizado del Arduino
+    'VehicleControl',     // Nombre personalizado del dispositivo
     'HC-05',              // Módulo Bluetooth común
     'HC-06',              // Módulo Bluetooth común
     'ESP32',              // Si usas ESP32 con Bluetooth
     'Arduino',            // Nombre genérico
   ];
   
-  // UUID de servicio específico para tu Arduino (opcional pero recomendado)
-  private readonly VEHICLE_SERVICE_UUID = '00001101-0000-1000-8000-00805F9B34FB'; // SPP UUID
+  // UUID de servicio específico para tu dispositivo BLE
+  private readonly VEHICLE_SERVICE_UUID = '6E400001-B5A3-F393-E0A9-E50E24DCCA9E'; // Nordic UART Service UUID
+  private readonly VEHICLE_CHARACTERISTIC_RX = '6E400002-B5A3-F393-E0A9-E50E24DCCA9E';
+  private readonly VEHICLE_CHARACTERISTIC_TX = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
   
   private readonly CONNECTION_TIMEOUT = 10000; // 10 segundos
+  private readonly SCAN_TIMEOUT = 10000; // 10 segundos para escaneo
+
+  constructor() {
+    this.manager = new BleManager();
+  }
+
+  /**
+   * Solicitar permisos de Bluetooth necesarios
+   */
+  private async requestBluetoothPermissions(): Promise<boolean> {
+    if (Platform.OS === 'android') {
+      try {
+        const granted = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        ]);
+        
+        const allPermissionsGranted = Object.values(granted).every(
+          permission => permission === PermissionsAndroid.RESULTS.GRANTED
+        );
+        
+        if (!allPermissionsGranted) {
+          Alert.alert(
+            'Permisos requeridos',
+            'La aplicación necesita permisos de Bluetooth para funcionar correctamente.'
+          );
+          return false;
+        }
+        
+        return true;
+      } catch (error) {
+        console.warn('Error requesting permissions:', error);
+        return false;
+      }
+    }
+    return true; // iOS maneja permisos automáticamente
+  }
 
   /**
    * Inicializar el servicio Bluetooth
-   * TODO: Integrar con react-native-bluetooth-serial
    */
   async initialize(): Promise<boolean> {
     try {
-      // Simulación de inicialización
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Solicitar permisos
+      const permissionsGranted = await this.requestBluetoothPermissions();
+      if (!permissionsGranted) {
+        return false;
+      }
+
+      // Verificar estado del Bluetooth
+      const state = await this.manager.state();
+      if (state !== State.PoweredOn) {
+        Alert.alert(
+          'Bluetooth desactivado',
+          'Por favor activa el Bluetooth para usar esta funcionalidad.'
+        );
+        return false;
+      }
       
       this.isInitialized = true;
-      
-      // Auto-conectar si encuentra el dispositivo
-      await this.autoConnect();
+      console.log('Bluetooth service initialized successfully');
       
       return true;
     } catch (error) {
@@ -51,98 +107,112 @@ class BluetoothServiceClass {
   }
 
   /**
-   * Conectar automáticamente al dispositivo del vehículo
-   * Filtra dispositivos por nombre y características específicas
+   * Conectar a un dispositivo BLE específico
    */
-  private async autoConnect(): Promise<void> {
+  async connectToDevice(device: Device): Promise<boolean> {
     try {
-      console.log('Buscando dispositivos Arduino...');
+      console.log(`Conectando a: ${device.name} (${device.id})`);
       
-      // Simulación de escaneo con filtrado
-      const availableDevices = await this.scanDevices();
-      const vehicleDevice = this.identifyVehicleDevice(availableDevices);
+      // Conectar al dispositivo
+      const connectedDevice = await device.connect();
       
-      if (vehicleDevice) {
-        console.log(`Dispositivo Arduino encontrado: ${vehicleDevice.name}`);
-        this.isConnected = true;
-        this.deviceAddress = vehicleDevice.address;
-      } else {
-        console.log('No se encontró dispositivo Arduino compatible');
+      // Descubrir servicios y características
+      const deviceWithServices = await connectedDevice.discoverAllServicesAndCharacteristics();
+      
+      this.connectedDevice = deviceWithServices;
+      this.isConnected = true;
+      
+      console.log('Conexión establecida exitosamente');
+      
+      // Configurar listener para desconexión
+      device.onDisconnected(() => {
+        console.log('Dispositivo desconectado');
         this.isConnected = false;
+        this.connectedDevice = null;
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('Error connecting to device:', error);
+      this.isConnected = false;
+      this.connectedDevice = null;
+      return false;
+    }
+  }
+
+  /**
+   * Buscar y conectar automáticamente al primer dispositivo del vehículo
+   */
+  async autoConnect(): Promise<boolean> {
+    try {
+      console.log('Buscando dispositivos del vehículo...');
+      
+      const availableDevices = await this.scanDevices();
+      const vehicleDevices = this.filterVehicleDevices(availableDevices);
+      
+      if (vehicleDevices.length === 0) {
+        console.log('No se encontraron dispositivos del vehículo');
+        return false;
       }
+      
+      // Intentar conectar al dispositivo con mejor señal
+      const bestDevice = vehicleDevices[0];
+      console.log(`Intentando conectar a: ${bestDevice.name}`);
+      
+      return await this.connectToDevice(bestDevice);
       
     } catch (error) {
       console.error('Auto-connection failed:', error);
-      this.isConnected = false;
+      return false;
     }
   }
 
   /**
-   * Identificar el dispositivo Arduino correcto entre los disponibles
+   * Filtrar dispositivos para encontrar solo los del vehículo
    */
-  private identifyVehicleDevice(devices: any[]): any | null {
-    // Buscar por patrones de nombre conocidos
-    for (const pattern of this.VEHICLE_DEVICE_PATTERNS) {
-      const device = devices.find(d => 
-        d.name && d.name.toLowerCase().includes(pattern.toLowerCase())
+  filterVehicleDevices(devices: Device[]): Device[] {
+    return devices.filter(device => {
+      if (!device.name) return false;
+      
+      return this.VEHICLE_DEVICE_PATTERNS.some(pattern => 
+        device.name!.toLowerCase().includes(pattern.toLowerCase())
       );
-      if (device) {
-        console.log(`Dispositivo identificado por patrón "${pattern}": ${device.name}`);
-        return device;
-      }
-    }
-    
-    // Si no encuentra por nombre, buscar por características específicas
-    // Por ejemplo, dispositivos con RSSI fuerte y que soporten SPP
-    const strongSignalDevices = devices.filter(d => d.rssi && d.rssi > -60);
-    
-    if (strongSignalDevices.length === 1) {
-      console.log('Dispositivo identificado por señal fuerte:', strongSignalDevices[0].name);
-      return strongSignalDevices[0];
-    }
-    
-    return null;
+    }).sort((a, b) => (b.rssi || -100) - (a.rssi || -100)); // Ordenar por señal más fuerte
   }
 
   /**
-   * Enviar comando al vehículo
+   * Enviar comando al vehículo via BLE
    */
   async sendCommand(command: VehicleCommand): Promise<boolean> {
-    if (!this.isConnected) {
+    if (!this.isConnected || !this.connectedDevice) {
       throw new Error('No hay conexión Bluetooth');
     }
 
     try {
-      // Simulación de envío de comando
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // En implementación real:
-      // 1. Formatear comando según protocolo del Arduino
-      //    Ejemplo: "LOCK\n" o "UNLOCK\n"
-      // 2. Enviar vía Bluetooth
-      // 3. Esperar confirmación
-      // 4. Procesar respuesta
-      
       const commandMap = {
-        lock: 'LOCK\n',      // Comando que entiende el Arduino
-        unlock: 'UNLOCK\n',  // Comando que entiende el Arduino
-        status: 'STATUS\n',  // Comando que entiende el Arduino
+        lock: 'LOCK\n',
+        unlock: 'UNLOCK\n',
+        status: 'STATUS\n',
       };
       
-      console.log(`Sending command: ${commandMap[command]}`);
+      const commandString = commandMap[command];
+      console.log(`Enviando comando: ${commandString.trim()}`);
       
-      // Simulación de éxito aleatorio para testing
-      const success = Math.random() > 0.1; // 90% éxito
+      // Convertir comando a base64
+      const commandBase64 = encode(commandString);
       
-      if (success) {
-        console.log(`Command ${command} executed successfully`);
-        return true;
-      } else {
-        throw new Error('Command execution failed');
-      }
+      // Enviar comando a través de la característica RX
+      await this.connectedDevice.writeCharacteristicWithResponseForService(
+        this.VEHICLE_SERVICE_UUID,
+        this.VEHICLE_CHARACTERISTIC_RX,
+        commandBase64
+      );
+      
+      console.log(`Comando ${command} enviado exitosamente`);
+      return true;
       
     } catch (error) {
-      console.error('Command sending failed:', error);
+      console.error('Error enviando comando:', error);
       return false;
     }
   }
@@ -157,12 +227,13 @@ class BluetoothServiceClass {
   /**
    * Obtener información del dispositivo conectado
    */
-  getConnectedDevice(): { name: string; address: string } | null {
-    if (!this.isConnected) return null;
+  getConnectedDevice(): { name: string; id: string; rssi: number | null } | null {
+    if (!this.isConnected || !this.connectedDevice) return null;
     
     return {
-      name: 'Arduino Vehicle Controller',
-      address: this.deviceAddress || 'Unknown',
+      name: this.connectedDevice.name || 'Dispositivo desconocido',
+      id: this.connectedDevice.id,
+      rssi: this.connectedDevice.rssi,
     };
   }
 
@@ -171,9 +242,8 @@ class BluetoothServiceClass {
    */
   async reconnect(): Promise<boolean> {
     try {
-      this.isConnected = false;
-      await this.autoConnect();
-      return this.isConnected;
+      await this.disconnect();
+      return await this.autoConnect();
     } catch (error) {
       console.error('Reconnection failed:', error);
       return false;
@@ -184,69 +254,72 @@ class BluetoothServiceClass {
    * Desconectar del dispositivo
    */
   async disconnect(): Promise<void> {
-    this.isConnected = false;
-    this.deviceAddress = null;
-    console.log('Disconnected from Bluetooth device');
-  }
-
-  /**
-   * Escanear dispositivos disponibles
-   * TODO: Implementar con react-native-bluetooth-classic
-   */
-  async scanDevices(): Promise<any[]> {
-    console.log('Escaneando dispositivos Bluetooth...');
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    // Simulación de dispositivos encontrados
-    return [
-      {
-        name: 'VehicleControl_Arduino',
-        address: '00:11:22:33:44:55',
-        rssi: -45, // Señal fuerte
-      },
-      {
-        name: 'HC-05',
-        address: '00:11:22:33:44:56',
-        rssi: -35, // Señal muy fuerte
-      },
-      {
-        name: 'AirPods Pro',
-        address: '00:11:22:33:44:57',
-        rssi: -50, // Este sería filtrado por no ser Arduino
-      },
-      {
-        name: 'Samsung Buds',
-        address: '00:11:22:33:44:58',
-        rssi: -40, // Este también sería filtrado
-      }
-    ];
-  }
-
-  /**
-   * Validar que el dispositivo es realmente un Arduino
-   * Envía un comando de prueba para verificar
-   */
-  async validateArduinoDevice(deviceAddress: string): Promise<boolean> {
     try {
-      // En implementación real:
-      // 1. Conectar temporalmente al dispositivo
-      // 2. Enviar comando de identificación (ej: "PING\n")
-      // 3. Esperar respuesta específica (ej: "PONG_VEHICLE\n")
-      // 4. Desconectar si no es el dispositivo correcto
-      
-      console.log(`Validando dispositivo Arduino: ${deviceAddress}`);
-      
-      // Simulación de validación
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simular que el dispositivo responde correctamente
-      return true;
-      
+      if (this.connectedDevice) {
+        await this.connectedDevice.cancelConnection();
+      }
+      if (this.scanSubscription) {
+        this.manager.stopDeviceScan();
+        this.scanSubscription = null;
+      }
     } catch (error) {
-      console.error('Device validation failed:', error);
-      return false;
+      console.error('Error during disconnection:', error);
+    } finally {
+      this.isConnected = false;
+      this.connectedDevice = null;
+      console.log('Desconectado del dispositivo Bluetooth');
     }
   }
+
+  /**
+   * Escanear dispositivos BLE disponibles
+   */
+  async scanDevices(): Promise<Device[]> {
+    if (!this.isInitialized) {
+      throw new Error('Bluetooth service not initialized');
+    }
+
+    console.log('Escaneando dispositivos BLE...');
+    
+    const devices: Device[] = [];
+    const deviceMap = new Map<string, Device>();
+
+    return new Promise((resolve, reject) => {
+      // Detener escaneo previo si existe
+      if (this.scanSubscription) {
+        this.manager.stopDeviceScan();
+        this.scanSubscription = null;
+      }
+
+      // Configurar timeout para el escaneo
+      const scanTimeout = setTimeout(() => {
+        this.manager.stopDeviceScan();
+        console.log(`Escaneo completado. Encontrados ${devices.length} dispositivos`);
+        resolve(devices);
+      }, this.SCAN_TIMEOUT);
+
+      // Iniciar escaneo
+      this.scanSubscription = this.manager.startDeviceScan(
+        null, // Escanear todos los servicios
+        { allowDuplicates: false },
+        (error, device) => {
+          if (error) {
+            clearTimeout(scanTimeout);
+            this.manager.stopDeviceScan();
+            reject(error);
+            return;
+          }
+
+          if (device && device.name && !deviceMap.has(device.id)) {
+            deviceMap.set(device.id, device);
+            devices.push(device);
+            console.log(`Dispositivo encontrado: ${device.name} (${device.id}) RSSI: ${device.rssi}`);
+          }
+        }
+      );
+    });
+  }
+
 }
 
 export const BluetoothService = new BluetoothServiceClass();
