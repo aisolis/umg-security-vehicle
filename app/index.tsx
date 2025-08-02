@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Lock, User, Eye, EyeOff } from 'lucide-react-native';
+import { Lock, Mail, Eye, EyeOff } from 'lucide-react-native';
 import { colors, typography, spacing } from '@/styles';
 import { AuthService } from '@/services/AuthService';
 
@@ -21,30 +21,33 @@ const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const [credentials, setCredentials] = useState({
-    username: '',
+    email: '',
     password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ username?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   const validateForm = () => {
-    const newErrors: { username?: string; password?: string } = {};
+    const validation = AuthService.validateCredentials(credentials);
     
-    if (!credentials.username.trim()) {
-      newErrors.username = 'Usuario requerido';
-    } else if (credentials.username.length < 3) {
-      newErrors.username = 'Usuario debe tener al menos 3 caracteres';
+    if (!validation.isValid) {
+      const newErrors: { email?: string; password?: string } = {};
+      
+      validation.errors.forEach(error => {
+        if (error.includes('email') || error.includes('Email')) {
+          newErrors.email = error;
+        } else if (error.includes('contraseña') || error.includes('password')) {
+          newErrors.password = error;
+        }
+      });
+      
+      setErrors(newErrors);
+      return false;
     }
     
-    if (!credentials.password.trim()) {
-      newErrors.password = 'Contraseña requerida';
-    } else if (credentials.password.length < 6) {
-      newErrors.password = 'Contraseña debe tener al menos 6 caracteres';
-    }
-    
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    setErrors({});
+    return true;
   };
 
   const handleLogin = async () => {
@@ -53,21 +56,26 @@ export default function LoginScreen() {
     setIsLoading(true);
     
     try {
-      const success = await AuthService.login(credentials.username, credentials.password);
+      const success = await AuthService.login(credentials.email, credentials.password);
       
       if (success) {
+        console.log('✅ Login exitoso, navegando a main');
         router.replace('/main');
       } else {
         Alert.alert('Error', 'Credenciales incorrectas');
       }
-    } catch (error) {
-      Alert.alert('Error', 'Error de conexión. Intente nuevamente.');
+    } catch (error: any) {
+      console.error('❌ Error en login:', error);
+      Alert.alert(
+        'Error de Autenticación', 
+        error.message || 'Error de conexión. Verifique su internet e intente nuevamente.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isFormValid = credentials.username.length >= 3 && credentials.password.length >= 6;
+  const isFormValid = credentials.email.includes('@') && credentials.password.length >= 6;
 
   return (
     <LinearGradient
@@ -91,30 +99,31 @@ export default function LoginScreen() {
 
             {/* Form Section */}
             <View style={styles.form}>
-              {/* Username Input */}
+              {/* Email Input */}
               <View style={styles.inputContainer}>
                 <View style={styles.inputIcon}>
-                  <User size={20} color={colors.neutral.medium} />
+                  <Mail size={20} color={colors.neutral.medium} />
                 </View>
                 <TextInput
                   style={[
                     styles.input,
-                    errors.username && styles.inputError
+                    errors.email && styles.inputError
                   ]}
-                  placeholder="Usuario"
+                  placeholder="Correo electrónico"
                   placeholderTextColor={colors.neutral.medium}
-                  value={credentials.username}
+                  value={credentials.email}
                   onChangeText={(text) => {
-                    setCredentials({ ...credentials, username: text });
-                    if (errors.username) {
-                      setErrors({ ...errors, username: undefined });
+                    setCredentials({ ...credentials, email: text });
+                    if (errors.email) {
+                      setErrors({ ...errors, email: undefined });
                     }
                   }}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  keyboardType="email-address"
                 />
               </View>
-              {errors.username && <Text style={styles.errorText}>{errors.username}</Text>}
+              {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
               {/* Password Input */}
               <View style={styles.inputContainer}>

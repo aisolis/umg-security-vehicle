@@ -28,7 +28,7 @@ export default function MainScreen() {
   const [vehicleState, setVehicleState] = useState<VehicleState>('unknown');
   const [isConnected, setIsConnected] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [userInfo, setUserInfo] = useState<{ username: string } | null>(null);
+  const [userInfo, setUserInfo] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
     const user = AuthService.getCurrentUser();
@@ -180,8 +180,8 @@ export default function MainScreen() {
         {
           text: 'Cerrar Sesión',
           style: 'destructive',
-          onPress: () => {
-            AuthService.logout();
+          onPress: async () => {
+            await AuthService.logout();
             router.replace('/');
           },
         },
@@ -200,7 +200,7 @@ export default function MainScreen() {
           <View style={styles.headerContent}>
             <View>
               <Text style={styles.welcomeText}>Bienvenido</Text>
-              <Text style={styles.usernameText}>{userInfo?.username || 'Usuario'}</Text>
+              <Text style={styles.usernameText}>{userInfo?.name || 'Usuario'}</Text>
             </View>
             <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
               <LogOut size={24} color={colors.neutral.white} />

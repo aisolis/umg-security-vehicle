@@ -1,51 +1,158 @@
 /**
- * AuthService - Servicio stub para autenticación
- * Preparado para integración con microservicio de autenticación
+ * AuthService - Servicio de autenticación integrado con API Supabase
  */
+
+import * as SecureStore from 'expo-secure-store';
 
 interface User {
   id: string;
-  username: string;
-  email?: string;
-  role?: string;
+  name: string;
+  email: string;
 }
 
 interface LoginCredentials {
-  username: string;
+  email: string;
   password: string;
+}
+
+interface Session {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+}
+
+interface LoginResponse {
+  success: boolean;
+  message: string;
+  user: User;
+  session: Session;
+}
+
+interface ApiError {
+  error: string;
 }
 
 class AuthServiceClass {
   private currentUser: User | null = null;
+  private currentSession: Session | null = null;
   private isAuthenticated: boolean = false;
+  
+  private readonly API_BASE_URL = 'https://kipzizzkkvxuadnjpvna.supabase.co/functions/v1';
+  private readonly STORAGE_KEYS = {
+    ACCESS_TOKEN: 'access_token',
+    REFRESH_TOKEN: 'refresh_token',
+    USER_DATA: 'user_data',
+  };
+
+  constructor() {
+    this.loadStoredSession();
+  }
 
   /**
-   * Método de login 
-   * TODO: Integrar con microservicio real
+   * Cargar sesión almacenada al inicializar
    */
-  async login(username: string, password: string): Promise<boolean> {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    if (username.length >= 3 && password.length >= 6) {
-      this.currentUser = {
-        id: 'user_' + Date.now(),
-        username,
-        email: `${username}@company.com`,
-        role: 'driver',
-      };
-      this.isAuthenticated = true;
-      return true;
+  private async loadStoredSession(): Promise<void> {
+    try {
+      const [accessToken, refreshToken, userData] = await Promise.all([
+        SecureStore.getItemAsync(this.STORAGE_KEYS.ACCESS_TOKEN),
+        SecureStore.getItemAsync(this.STORAGE_KEYS.REFRESH_TOKEN),
+        SecureStore.getItemAsync(this.STORAGE_KEYS.USER_DATA),
+      ]);
+
+      if (accessToken && refreshToken && userData) {
+        this.currentUser = JSON.parse(userData);
+        this.currentSession = {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          expires_at: 0, // Simplificado por ahora
+        };
+        this.isAuthenticated = true;
+        console.log('✅ Sesión cargada desde almacenamiento');
+      }
+    } catch (error) {
+      console.log('⚠️ No hay sesión almacenada o error al cargar:', error);
     }
-    
-    return false;
+  }
+
+  /**
+   * Método de login usando API real
+   */
+  async login(email: string, password: string): Promise<boolean> {
+    try {
+      console.log('🔐 Intentando login con:', email);
+      
+      const response = await fetch(`${this.API_BASE_URL}/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log('✅ Login exitoso');
+        
+        // Almacenar datos del usuario y sesión
+        this.currentUser = data.user;
+        this.currentSession = data.session;
+        this.isAuthenticated = true;
+
+        // Guardar en almacenamiento seguro
+        await this.saveSession(data.user, data.session);
+        
+        return true;
+      } else {
+        console.log('❌ Login fallido:', data.error);
+        throw new Error(data.error || 'Credenciales inválidas');
+      }
+    } catch (error) {
+      console.error('❌ Error durante login:', error);
+      this.isAuthenticated = false;
+      this.currentUser = null;
+      this.currentSession = null;
+      throw error;
+    }
+  }
+
+  /**
+   * Guardar sesión en almacenamiento seguro
+   */
+  private async saveSession(user: User, session: Session): Promise<void> {
+    try {
+      await Promise.all([
+        SecureStore.setItemAsync(this.STORAGE_KEYS.ACCESS_TOKEN, session.access_token),
+        SecureStore.setItemAsync(this.STORAGE_KEYS.REFRESH_TOKEN, session.refresh_token),
+        SecureStore.setItemAsync(this.STORAGE_KEYS.USER_DATA, JSON.stringify(user)),
+      ]);
+      console.log('✅ Sesión guardada en almacenamiento seguro');
+    } catch (error) {
+      console.error('❌ Error guardando sesión:', error);
+    }
   }
 
   /**
    * Cerrar sesión
    */
-  logout(): void {
-    this.currentUser = null;
-    this.isAuthenticated = false;
+  async logout(): Promise<void> {
+    try {
+      // Limpiar datos en memoria
+      this.currentUser = null;
+      this.currentSession = null;
+      this.isAuthenticated = false;
+
+      // Limpiar almacenamiento seguro
+      await Promise.all([
+        SecureStore.deleteItemAsync(this.STORAGE_KEYS.ACCESS_TOKEN),
+        SecureStore.deleteItemAsync(this.STORAGE_KEYS.REFRESH_TOKEN),
+        SecureStore.deleteItemAsync(this.STORAGE_KEYS.USER_DATA),
+      ]);
+
+      console.log('✅ Sesión cerrada y almacenamiento limpiado');
+    } catch (error) {
+      console.error('❌ Error cerrando sesión:', error);
+    }
   }
 
   /**
@@ -63,10 +170,19 @@ class AuthServiceClass {
   }
 
   /**
-   * Renovar token de autenticación (preparado para JWT)
-   * TODO: Implementar renovación de JWT
+   * Obtener token de acceso actual
+   */
+  getAccessToken(): string | null {
+    return this.currentSession?.access_token || null;
+  }
+
+  /**
+   * Renovar token de autenticación
+   * TODO: Implementar renovación usando refresh_token
    */
   async refreshToken(): Promise<boolean> {
+    // Por ahora retornamos el estado actual
+    // En el futuro se puede implementar renovación automática
     return this.isAuthenticated;
   }
 
@@ -76,18 +192,30 @@ class AuthServiceClass {
   validateCredentials(credentials: LoginCredentials): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
     
-    if (!credentials.username || credentials.username.trim().length < 3) {
-      errors.push('Usuario debe tener al menos 3 caracteres');
+    // Validar email
+    if (!credentials.email || credentials.email.trim().length === 0) {
+      errors.push('El email es requerido');
+    } else if (!this.isValidEmail(credentials.email)) {
+      errors.push('El email no tiene un formato válido');
     }
     
+    // Validar contraseña
     if (!credentials.password || credentials.password.length < 6) {
-      errors.push('Contraseña debe tener al menos 6 caracteres');
+      errors.push('La contraseña debe tener al menos 6 caracteres');
     }
     
     return {
       isValid: errors.length === 0,
       errors,
     };
+  }
+
+  /**
+   * Validar formato de email
+   */
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 }
 
